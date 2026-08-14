@@ -1,0 +1,6 @@
+{
+  "name": "Song Dice",
+  "description": "AI-powered multi-track arrangement generator with contextual dice rolling and DAW-ready MIDI export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
