@@ -39,7 +39,9 @@ enum class MusicalGenre(val displayName: String, val defaultBpm: Int) {
     EDM("EDM / House", 128),
     CINEMATIC("Cinematic Score", 90),
     FUNK("Funk & Soul", 108),
-    AFROBEAT("Afrobeat / Tropical", 105)
+    AFROBEAT("Afrobeat / Tropical", 105),
+    HOUSE("Classic House", 124),
+    TRAP("Trap / Hip-Hop", 140)
 }
 
 /**
@@ -50,7 +52,8 @@ data class MidiNote(
     @Json(name = "pitch") val pitch: Int,             // MIDI note number (0-127, e.g. 60 = C4, 36 = Kick)
     @Json(name = "startBeat") val startBeat: Double,  // Start position in quarter-note beats (e.g. 0.0, 0.5, 1.0)
     @Json(name = "durationBeats") val durationBeats: Double, // Duration in beats (e.g. 0.5 = 8th note, 1.0 = quarter)
-    @Json(name = "velocity") val velocity: Int = 100   // Velocity (1-127)
+    @Json(name = "velocity") val velocity: Int = 100,  // Velocity (1-127)
+    @Json(name = "pan") val pan: Double = 0.5         // Stereo panning from 0.0 (Left) to 1.0 (Right), center is 0.5
 )
 
 /**

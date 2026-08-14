@@ -66,6 +66,23 @@ class AudioSynthPlayer {
         "Melody" to false
     )
 
+    // Master FX Send Levels (Live adjustable)
+    @Volatile
+    private var masterReverbAmount = 0.35f
+    @Volatile
+    private var masterDelayAmount = 0.25f
+
+    // FX Buffers
+    private val delayBufferL = DoubleArray(sampleRate * 2) // 2 sec max delay
+    private val delayBufferR = DoubleArray(sampleRate * 2)
+    private var delayWritePos = 0
+
+    // Simple Schroeder/Moorer Reverb Comb Filters
+    private val combDelays = intArrayOf(1557, 1617, 1491, 1422)
+    private val combBuffersL = Array(4) { DoubleArray(2000) }
+    private val combBuffersR = Array(4) { DoubleArray(2000) }
+    private val combPos = IntArray(4)
+
     fun setTrackVolume(trackName: String, volume: Float) {
         trackVolumes[trackName] = volume.coerceIn(0f, 1f)
     }
@@ -76,6 +93,62 @@ class AudioSynthPlayer {
 
     fun setTrackSolo(trackName: String, isSoloed: Boolean) {
         trackSolos[trackName] = isSoloed
+    }
+
+    fun setMasterReverb(amount: Float) {
+        masterReverbAmount = amount.coerceIn(0f, 1f)
+    }
+
+    fun setMasterDelay(amount: Float) {
+        masterDelayAmount = amount.coerceIn(0f, 1f)
+    }
+
+    // Pre-allocated array to avoid object creation in inner loop
+    private val fxOutputBuffer = DoubleArray(2)
+
+    private fun processReverb(inL: Double, inR: Double) {
+        var outL = 0.0
+        var outR = 0.0
+        val fb = 0.84 // Feedback
+
+        // 4 Parallel Comb Filters
+        for (i in 0 until 4) {
+            val d = combDelays[i]
+            val p = combPos[i]
+
+            // Left
+            val readL = combBuffersL[i][p]
+            combBuffersL[i][p] = inL + readL * fb
+            outL += readL
+
+            // Right
+            val readR = combBuffersR[i][p]
+            combBuffersR[i][p] = inR + readR * fb
+            outR += readR
+
+            combPos[i] = (p + 1) % d
+        }
+
+        // Pseudo All-pass
+        fxOutputBuffer[0] = outL * 0.5
+        fxOutputBuffer[1] = outR * 0.5
+    }
+
+    private fun processDelay(inL: Double, inR: Double, delayFrames: Int) {
+        // Ping-pong delay (cross-feedback)
+        val fb = 0.45
+
+        val readPos = (delayWritePos - delayFrames + delayBufferL.size) % delayBufferL.size
+        val readL = delayBufferL[readPos]
+        val readR = delayBufferR[readPos]
+
+        delayBufferL[delayWritePos] = inL + readR * fb
+        delayBufferR[delayWritePos] = inR + readL * fb
+
+        delayWritePos = (delayWritePos + 1) % delayBufferL.size
+
+        fxOutputBuffer[0] = readL
+        fxOutputBuffer[1] = readR
     }
 
     fun play(arrangement: SongArrangement, scope: CoroutineScope) {
@@ -180,9 +253,25 @@ class AudioSynthPlayer {
                             mixRight += mR * 0.55 * vol
                         }
 
+                        // Apply Master FX
+                        // Sync delay to BPM (e.g. dotted 8th note delay)
+                        val delayTimeSec = secondsPerBeat * 0.75
+                        val delayFrames = (delayTimeSec * sampleRate).toInt()
+
+                        processDelay(mixLeft, mixRight, delayFrames)
+                        val delayL = fxOutputBuffer[0]
+                        val delayR = fxOutputBuffer[1]
+
+                        processReverb(mixLeft, mixRight)
+                        val reverbL = fxOutputBuffer[0]
+                        val reverbR = fxOutputBuffer[1]
+
+                        val finalL = mixLeft + (delayL * masterDelayAmount) + (reverbL * masterReverbAmount)
+                        val finalR = mixRight + (delayR * masterDelayAmount) + (reverbR * masterReverbAmount)
+
                         // Master Transparent Soft-Limiter (Natural Tanh Soft Clipping)
-                        val masteredL = tanh(mixLeft * 0.85)
-                        val masteredR = tanh(mixRight * 0.85)
+                        val masteredL = tanh(finalL * 0.85)
+                        val masteredR = tanh(finalR * 0.85)
 
                         buffer[f * 2] = (masteredL * 28000.0).toInt().toShort()
                         buffer[f * 2 + 1] = (masteredR * 28000.0).toInt().toShort()

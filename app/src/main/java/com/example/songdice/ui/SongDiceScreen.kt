@@ -315,9 +315,13 @@ fun SongDiceScreen(
                         trackMutes = uiState.trackMutes,
                         trackSolos = uiState.trackSolos,
                         trackVolumes = uiState.trackVolumes,
+                        masterReverb = uiState.masterReverb,
+                        masterDelay = uiState.masterDelay,
                         onToggleMute = { viewModel.toggleTrackMute(it) },
                         onToggleSolo = { viewModel.toggleTrackSolo(it) },
-                        onVolumeChange = { name, vol -> viewModel.setTrackVolume(name, vol) }
+                        onVolumeChange = { name, vol -> viewModel.setTrackVolume(name, vol) },
+                        onMasterReverbChange = { viewModel.setMasterReverb(it) },
+                        onMasterDelayChange = { viewModel.setMasterDelay(it) }
                     )
                 }
 
