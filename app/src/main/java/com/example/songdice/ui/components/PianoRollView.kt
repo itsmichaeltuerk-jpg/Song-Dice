@@ -66,9 +66,13 @@ fun PianoRollView(
     trackMutes: Map<String, Boolean> = emptyMap(),
     trackSolos: Map<String, Boolean> = emptyMap(),
     trackVolumes: Map<String, Float> = emptyMap(),
+    masterReverb: Float = 0.35f,
+    masterDelay: Float = 0.25f,
     onToggleMute: (String) -> Unit = {},
     onToggleSolo: (String) -> Unit = {},
     onVolumeChange: (String, Float) -> Unit = { _, _ -> },
+    onMasterReverbChange: (Float) -> Unit = {},
+    onMasterDelayChange: (Float) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val hasAnySolo = trackSolos.values.any { it }
@@ -296,6 +300,56 @@ fun PianoRollView(
                         onToggleSolo = { onToggleSolo(name) },
                         onVolumeChange = { onVolumeChange(name, it) }
                     )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Master FX Control Area
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Reverb Control
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "MASTER REVERB",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.LightGray,
+                            fontSize = 10.sp
+                        )
+                        Slider(
+                            value = masterReverb,
+                            onValueChange = onMasterReverbChange,
+                            valueRange = 0f..1f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = NeonCyan,
+                                activeTrackColor = NeonCyan.copy(alpha = 0.85f),
+                                inactiveTrackColor = StudioBorder
+                            )
+                        )
+                    }
+
+                    // Delay Control
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "MASTER DELAY",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.LightGray,
+                            fontSize = 10.sp
+                        )
+                        Slider(
+                            value = masterDelay,
+                            onValueChange = onMasterDelayChange,
+                            valueRange = 0f..1f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = NeonAmber,
+                                activeTrackColor = NeonAmber.copy(alpha = 0.85f),
+                                inactiveTrackColor = StudioBorder
+                            )
+                        )
+                    }
                 }
             }
         }

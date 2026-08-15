@@ -36,7 +36,9 @@ data class SongDiceUiState(
     val exportedFile: File? = null,
     val trackMutes: Map<String, Boolean> = mapOf("Drums" to false, "Bass" to false, "Chords" to false, "Melody" to false),
     val trackSolos: Map<String, Boolean> = mapOf("Drums" to false, "Bass" to false, "Chords" to false, "Melody" to false),
-    val trackVolumes: Map<String, Float> = mapOf("Drums" to 0.95f, "Bass" to 0.90f, "Chords" to 0.85f, "Melody" to 0.90f)
+    val trackVolumes: Map<String, Float> = mapOf("Drums" to 0.95f, "Bass" to 0.90f, "Chords" to 0.85f, "Melody" to 0.90f),
+    val masterReverb: Float = 0.35f,
+    val masterDelay: Float = 0.25f
 )
 
 class SongDiceViewModel(
@@ -123,6 +125,20 @@ class SongDiceViewModel(
             updated[trackName] = volume
             audioPlayer.setTrackVolume(trackName, volume)
             state.copy(trackVolumes = updated)
+        }
+    }
+
+    fun setMasterReverb(volume: Float) {
+        _uiState.update { state ->
+            audioPlayer.setMasterReverb(volume)
+            state.copy(masterReverb = volume)
+        }
+    }
+
+    fun setMasterDelay(volume: Float) {
+        _uiState.update { state ->
+            audioPlayer.setMasterDelay(volume)
+            state.copy(masterDelay = volume)
         }
     }
 
