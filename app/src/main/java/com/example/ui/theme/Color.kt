@@ -2,21 +2,27 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Studio Dark Palette
-val StudioBackground = Color(0xFF0E0C16)
-val StudioSurface = Color(0xFF181524)
-val StudioSurfaceVariant = Color(0xFF231E33)
-val StudioBorder = Color(0xFF352E4B)
+// Modern Clean Dark Palette
+val StudioBackground = Color(0xFF121212)
+val StudioSurface = Color(0xFF1E1E1E)
+val StudioSurfaceVariant = Color(0xFF2D2D2D)
+val StudioBorder = Color(0xFF3E3E3E)
 
-// Neon Accents
-val NeonViolet = Color(0xFF9D65FF)
-val NeonCyan = Color(0xFF00E5FF)
-val NeonPink = Color(0xFFFF2A85)
-val NeonAmber = Color(0xFFFFB300)
-val NeonGreen = Color(0xFF00E676)
+// Flat Pastel Accents
+val FlatViolet = Color(0xFFB39DDB)
+val FlatCyan = Color(0xFF80DEEA)
+val FlatPink = Color(0xFFF48FB1)
+val FlatAmber = Color(0xFFFFCC80)
+val FlatGreen = Color(0xFFA5D6A7)
 
-val TrackDrumsColor = Color(0xFF00E5FF)
-val TrackBassColor = Color(0xFF9D65FF)
-val TrackChordsColor = Color(0xFFFFB300)
-val TrackMelodyColor = Color(0xFFFF2A85)
+// Deprecated Neon Colors mapped to new flat colors to prevent immediate compilation errors
+val NeonViolet = FlatViolet
+val NeonCyan = FlatCyan
+val NeonPink = FlatPink
+val NeonAmber = FlatAmber
+val NeonGreen = FlatGreen
 
+val TrackDrumsColor = FlatCyan
+val TrackBassColor = FlatViolet
+val TrackChordsColor = FlatAmber
+val TrackMelodyColor = FlatPink

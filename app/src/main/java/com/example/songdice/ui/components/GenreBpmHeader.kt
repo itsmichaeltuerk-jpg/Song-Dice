@@ -36,9 +36,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.songdice.data.model.MusicalGenre
-import com.example.ui.theme.NeonAmber
-import com.example.ui.theme.NeonCyan
-import com.example.ui.theme.NeonViolet
+import com.example.ui.theme.FlatAmber
+import com.example.ui.theme.FlatCyan
+import com.example.ui.theme.FlatViolet
 import com.example.ui.theme.StudioBorder
 import com.example.ui.theme.StudioSurface
 
@@ -91,7 +91,7 @@ fun GenreBpmHeader(
                             )
                         },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = NeonViolet,
+                            selectedContainerColor = FlatViolet,
                             selectedLabelColor = Color.White,
                             containerColor = Color.Transparent,
                             labelColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -100,7 +100,7 @@ fun GenreBpmHeader(
                             enabled = true,
                             selected = isSelected,
                             borderColor = StudioBorder,
-                            selectedBorderColor = NeonViolet
+                            selectedBorderColor = FlatViolet
                         ),
                         modifier = Modifier.testTag("genre_chip_${genre.name}")
                     )
@@ -119,7 +119,7 @@ fun GenreBpmHeader(
                     Icon(
                         imageVector = Icons.Default.Speed,
                         contentDescription = "BPM Tempo",
-                        tint = NeonAmber,
+                        tint = FlatAmber,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
@@ -140,7 +140,7 @@ fun GenreBpmHeader(
                         Icon(
                             imageVector = Icons.Default.Remove,
                             contentDescription = "Decrease BPM",
-                            tint = NeonCyan,
+                            tint = FlatCyan,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -149,7 +149,7 @@ fun GenreBpmHeader(
                         text = "$bpm BPM",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = NeonAmber,
+                        color = FlatAmber,
                         modifier = Modifier.padding(horizontal = 8.dp)
                     )
 
@@ -160,7 +160,7 @@ fun GenreBpmHeader(
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = "Increase BPM",
-                            tint = NeonCyan,
+                            tint = FlatCyan,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -173,8 +173,8 @@ fun GenreBpmHeader(
                 valueRange = 60f..200f,
                 steps = 140,
                 colors = SliderDefaults.colors(
-                    thumbColor = NeonAmber,
-                    activeTrackColor = NeonAmber,
+                    thumbColor = FlatAmber,
+                    activeTrackColor = FlatAmber,
                     inactiveTrackColor = StudioBorder
                 ),
                 modifier = Modifier

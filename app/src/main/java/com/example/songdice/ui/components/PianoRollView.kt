@@ -46,10 +46,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.songdice.data.model.SongArrangement
-import com.example.ui.theme.NeonAmber
-import com.example.ui.theme.NeonCyan
-import com.example.ui.theme.NeonPink
-import com.example.ui.theme.NeonViolet
+import com.example.ui.theme.FlatAmber
+import com.example.ui.theme.FlatCyan
+import com.example.ui.theme.FlatPink
+import com.example.ui.theme.FlatViolet
 import com.example.ui.theme.StudioBorder
 import com.example.ui.theme.StudioSurface
 import com.example.ui.theme.StudioSurfaceVariant
@@ -113,7 +113,7 @@ fun PianoRollView(
                         Icon(
                             imageVector = Icons.Default.GraphicEq,
                             contentDescription = "Studio Sequencer",
-                            tint = NeonCyan,
+                            tint = FlatCyan,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -144,7 +144,7 @@ fun PianoRollView(
                         text = if (arrangement != null) "4 BARS • 16 BEATS" else "STANDBY",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = NeonAmber,
+                        color = FlatAmber,
                         fontSize = 10.sp,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
@@ -242,7 +242,7 @@ fun PianoRollView(
                             val playheadX = (playbackProgressBeats / totalBeats).toFloat() * width
                             // Glow shadow line
                             drawLine(
-                                color = NeonPink.copy(alpha = 0.5f),
+                                color = FlatPink.copy(alpha = 0.5f),
                                 start = Offset(playheadX, 0f),
                                 end = Offset(playheadX, height),
                                 strokeWidth = 5f
@@ -323,8 +323,8 @@ fun PianoRollView(
                             onValueChange = onMasterReverbChange,
                             valueRange = 0f..1f,
                             colors = SliderDefaults.colors(
-                                thumbColor = NeonCyan,
-                                activeTrackColor = NeonCyan.copy(alpha = 0.85f),
+                                thumbColor = FlatCyan,
+                                activeTrackColor = FlatCyan.copy(alpha = 0.85f),
                                 inactiveTrackColor = StudioBorder
                             )
                         )
@@ -344,8 +344,8 @@ fun PianoRollView(
                             onValueChange = onMasterDelayChange,
                             valueRange = 0f..1f,
                             colors = SliderDefaults.colors(
-                                thumbColor = NeonAmber,
-                                activeTrackColor = NeonAmber.copy(alpha = 0.85f),
+                                thumbColor = FlatAmber,
+                                activeTrackColor = FlatAmber.copy(alpha = 0.85f),
                                 inactiveTrackColor = StudioBorder
                             )
                         )
@@ -423,7 +423,7 @@ private fun ChannelStripRow(
             MixerToggleButton(
                 label = "M",
                 isActive = isMuted,
-                activeColor = NeonPink,
+                activeColor = FlatPink,
                 defaultColor = Color.DarkGray,
                 onClick = onToggleMute,
                 testTag = "mute_${name.lowercase()}"
@@ -433,7 +433,7 @@ private fun ChannelStripRow(
             MixerToggleButton(
                 label = "S",
                 isActive = isSoloed,
-                activeColor = NeonAmber,
+                activeColor = FlatAmber,
                 defaultColor = Color.DarkGray,
                 onClick = onToggleSolo,
                 testTag = "solo_${name.lowercase()}"

@@ -42,9 +42,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.ui.theme.NeonAmber
-import com.example.ui.theme.NeonCyan
-import com.example.ui.theme.NeonViolet
+import com.example.ui.theme.FlatAmber
+import com.example.ui.theme.FlatCyan
+import com.example.ui.theme.FlatViolet
 import com.example.ui.theme.StudioBorder
 import com.example.ui.theme.StudioSurface
 
@@ -87,7 +87,7 @@ fun StylePromptInput(
                     Icon(
                         imageVector = Icons.Default.AutoAwesome,
                         contentDescription = "Gemini AI Influence",
-                        tint = NeonViolet,
+                        tint = FlatViolet,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
@@ -103,7 +103,7 @@ fun StylePromptInput(
                 Text(
                     text = "GEMINI 3.5 FLASH",
                     style = MaterialTheme.typography.labelSmall,
-                    color = NeonCyan,
+                    color = FlatCyan,
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -128,7 +128,7 @@ fun StylePromptInput(
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = NeonViolet,
+                    focusedBorderColor = FlatViolet,
                     unfocusedBorderColor = StudioBorder,
                     focusedContainerColor = Color.Black.copy(alpha = 0.3f),
                     unfocusedContainerColor = Color.Black.copy(alpha = 0.2f),
@@ -205,7 +205,7 @@ fun StylePromptInput(
                         .height(42.dp),
                     shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = NeonViolet.copy(alpha = 0.85f),
+                        containerColor = FlatViolet.copy(alpha = 0.85f),
                         contentColor = Color.White
                     )
                 ) {

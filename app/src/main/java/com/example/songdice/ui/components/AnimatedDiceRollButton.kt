@@ -48,10 +48,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.ui.theme.NeonAmber
-import com.example.ui.theme.NeonCyan
-import com.example.ui.theme.NeonPink
-import com.example.ui.theme.NeonViolet
+import com.example.ui.theme.FlatAmber
+import com.example.ui.theme.FlatCyan
+import com.example.ui.theme.FlatPink
+import com.example.ui.theme.FlatViolet
 import kotlinx.coroutines.launch
 
 @Composable
@@ -119,11 +119,11 @@ fun AnimatedDiceRollButton(
     // Glowing multi-color gradient border
     val glowingGradient = Brush.sweepGradient(
         listOf(
-            NeonViolet,
-            NeonPink,
-            NeonCyan,
-            NeonAmber,
-            NeonViolet
+            FlatViolet,
+            FlatPink,
+            FlatCyan,
+            FlatAmber,
+            FlatViolet
         )
     )
 
@@ -164,8 +164,8 @@ fun AnimatedDiceRollButton(
                 .background(
                     brush = Brush.horizontalGradient(
                         colors = listOf(
-                            NeonViolet.copy(alpha = 0.9f),
-                            NeonPink.copy(alpha = 0.85f)
+                            FlatViolet.copy(alpha = 0.9f),
+                            FlatPink.copy(alpha = 0.85f)
                         )
                     )
                 ),

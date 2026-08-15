@@ -6,19 +6,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 private val DarkStudioColorScheme = darkColorScheme(
-    primary = NeonViolet,
-    onPrimary = Color.White,
+    primary = FlatViolet,
+    onPrimary = Color(0xFF1E1E1E), // Dark text on light accent
     primaryContainer = StudioSurfaceVariant,
-    onPrimaryContainer = NeonCyan,
-    secondary = NeonCyan,
-    onSecondary = Color.Black,
-    tertiary = NeonPink,
+    onPrimaryContainer = FlatCyan,
+    secondary = FlatCyan,
+    onSecondary = Color(0xFF121212),
+    tertiary = FlatPink,
     background = StudioBackground,
-    onBackground = Color.White,
+    onBackground = Color(0xFFEEEEEE),
     surface = StudioSurface,
-    onSurface = Color.White,
+    onSurface = Color(0xFFE0E0E0),
     surfaceVariant = StudioSurfaceVariant,
-    onSurfaceVariant = Color(0xFFC7C2DA),
+    onSurfaceVariant = Color(0xFFBDBDBD),
     outline = StudioBorder
 )
 
