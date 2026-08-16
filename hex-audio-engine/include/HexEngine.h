@@ -1,9 +1,12 @@
 #pragma once
 
 #include "DataTypes.h"
+#include "DSP.h"
 #include <unordered_map>
 #include <string>
 #include <functional>
+#include <memory>
+#include <vector>
 
 namespace HexAudio {
 
@@ -52,6 +55,9 @@ private:
 
     std::unordered_map<std::string, TrackConfig> m_tracks;
     PlayheadCallback m_onStepTrigger;
+
+    // Active voices pool
+    std::vector<std::unique_ptr<VoiceDSP>> m_activeVoices;
 };
 
 } // namespace HexAudio

@@ -51,6 +51,20 @@ private:
     double m_phase;
 };
 
+// Simple One Pole Filter to replace Biquad for now
+class OnePoleFilter {
+public:
+    OnePoleFilter();
+    void setHighpass(double cutoff, double sampleRate);
+    void setBandpass(double cutoff, double sampleRate); // approximation
+    double process(double input);
+
+private:
+    double m_a0, m_b1;
+    double m_z1;
+    bool m_isHighpass;
+};
+
 // Snare Drum Procedural Synth
 class SnareDSP : public VoiceDSP {
 public:
@@ -66,6 +80,7 @@ private:
     bool m_active;
 
     double m_phaseTone;
+    OnePoleFilter m_filter;
 };
 
 // HiHat Procedural Synth
@@ -81,6 +96,8 @@ private:
     float m_pan;
     float m_pitchOffset;
     bool m_active;
+
+    OnePoleFilter m_filter;
 };
 
 // Percussion Synth (High/Low)

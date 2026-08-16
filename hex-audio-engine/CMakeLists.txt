@@ -20,3 +20,8 @@ target_include_directories(HexAudioEngine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/inc
 
 # Optional: Math library if needed on some platforms
 target_link_libraries(HexAudioEngine m)
+
+# Build the test harness executable
+add_executable(hex-engine-test src/main.cpp)
+target_link_libraries(hex-engine-test PRIVATE HexAudioEngine m)
+target_include_directories(hex-engine-test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)

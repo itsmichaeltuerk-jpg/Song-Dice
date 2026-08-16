@@ -70,22 +70,36 @@ void HexEngine::setOnStepTrigger(PlayheadCallback callback) {
 }
 
 void HexEngine::processAudio(float* outputBuffer, int numFrames) {
+    // Clear buffer (silence)
+    for (int i = 0; i < numFrames * 2; ++i) {
+        outputBuffer[i] = 0.0f;
+    }
+
     if (!m_isRunning) {
-        // Output silence
-        for (int i = 0; i < numFrames * 2; ++i) {
-            outputBuffer[i] = 0.0f;
-        }
         return;
     }
 
     // A real C++ engine runs the scheduler based on processed samples
-    // rather than relying on a Javascript setInterval.
     scheduler();
 
-    // TODO: Process DSP objects and fill outputBuffer...
-    // For now, output silence in the stub.
-    for (int i = 0; i < numFrames * 2; ++i) {
-        outputBuffer[i] = 0.0f;
+    // Render all active voices and mix them into outputBuffer
+    for (auto it = m_activeVoices.begin(); it != m_activeVoices.end(); ) {
+        // Create a temporary buffer for this voice to render into
+        std::vector<float> voiceBuffer(numFrames * 2, 0.0f);
+
+        bool stillActive = (*it)->render(voiceBuffer.data(), numFrames, m_sampleRate, m_currentTime);
+
+        // Mix into main buffer with master volume
+        for (int i = 0; i < numFrames * 2; ++i) {
+            outputBuffer[i] += voiceBuffer[i] * m_masterVolume;
+        }
+
+        if (!stillActive) {
+            // Voice finished processing, remove it
+            it = m_activeVoices.erase(it);
+        } else {
+            ++it;
+        }
     }
 
     // Advance current time based on frames processed
@@ -138,9 +152,32 @@ void HexEngine::scheduleStep(int stepIndex, double time) {
 }
 
 void HexEngine::triggerVoice(VoiceType type, double time, float gainValue, float pan, float pitchOffset) {
-    // TODO: Instantiate/trigger DSP voices here based on type.
-    // Example: Kick, Snare, HiHat
-    // std::cout << "Triggering voice: " << (int)type << " at time " << time << std::endl;
+    std::unique_ptr<VoiceDSP> voice;
+
+    switch (type) {
+        case VoiceType::Kick:
+            voice = std::make_unique<KickDSP>();
+            break;
+        case VoiceType::Snare:
+            voice = std::make_unique<SnareDSP>();
+            break;
+        case VoiceType::HiHat:
+            voice = std::make_unique<HiHatDSP>();
+            break;
+        case VoiceType::PercHigh:
+            voice = std::make_unique<PercDSP>(420.0f);
+            break;
+        case VoiceType::PercLow:
+            voice = std::make_unique<PercDSP>(210.0f);
+            break;
+        default:
+            return;
+    }
+
+    if (voice) {
+        voice->trigger(time, gainValue, pan, pitchOffset);
+        m_activeVoices.push_back(std::move(voice));
+    }
 }
 
 } // namespace HexAudio
