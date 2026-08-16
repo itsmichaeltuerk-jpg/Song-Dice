@@ -3,6 +3,7 @@
 #include <fstream>
 #include <vector>
 #include <cstdint>
+#include <algorithm>
 
 using namespace HexAudio;
 

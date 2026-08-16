@@ -16,6 +16,12 @@ HexEngine::HexEngine(double initialBpm, int totalSteps)
       m_currentTime(0.0),
       m_totalSteps(totalSteps),
       m_onStepTrigger(nullptr) {
+
+    // Pre-allocate voice pools to avoid GC/malloc on real-time thread
+    m_poolKick.resize(POOL_SIZE_KICK);
+    m_poolSnare.resize(POOL_SIZE_SNARE);
+    m_poolHiHat.resize(POOL_SIZE_HIHAT);
+    m_poolPerc.resize(POOL_SIZE_PERC);
 }
 
 HexEngine::~HexEngine() {
@@ -82,24 +88,31 @@ void HexEngine::processAudio(float* outputBuffer, int numFrames) {
     // A real C++ engine runs the scheduler based on processed samples
     scheduler();
 
-    // Render all active voices and mix them into outputBuffer
-    for (auto it = m_activeVoices.begin(); it != m_activeVoices.end(); ) {
-        // Create a temporary buffer for this voice to render into
-        std::vector<float> voiceBuffer(numFrames * 2, 0.0f);
+    // The render functions already accumulate into the buffer using +=
+    // BUT we need to apply Master Volume at the end, so we process voices natively
+    // directly into outputBuffer (zero temp allocation)
 
-        bool stillActive = (*it)->render(voiceBuffer.data(), numFrames, m_sampleRate, m_currentTime);
+    for (auto& voice : m_poolKick) {
+        if (voice.isActive()) voice.render(outputBuffer, numFrames, m_sampleRate, m_currentTime);
+    }
+    for (auto& voice : m_poolSnare) {
+        if (voice.isActive()) voice.render(outputBuffer, numFrames, m_sampleRate, m_currentTime);
+    }
+    for (auto& voice : m_poolHiHat) {
+        if (voice.isActive()) voice.render(outputBuffer, numFrames, m_sampleRate, m_currentTime);
+    }
+    for (auto& voice : m_poolPerc) {
+        if (voice.isActive()) voice.render(outputBuffer, numFrames, m_sampleRate, m_currentTime);
+    }
 
-        // Mix into main buffer with master volume
-        for (int i = 0; i < numFrames * 2; ++i) {
-            outputBuffer[i] += voiceBuffer[i] * m_masterVolume;
-        }
+    // Apply master volume and simple soft-clipping limiter directly on the buffer
+    for (int i = 0; i < numFrames * 2; ++i) {
+        outputBuffer[i] *= m_masterVolume;
 
-        if (!stillActive) {
-            // Voice finished processing, remove it
-            it = m_activeVoices.erase(it);
-        } else {
-            ++it;
-        }
+        // Soft clipping / Limiter (tanh approx) to prevent harsh digital clipping
+        // when multiple loud voices stack up
+        if (outputBuffer[i] > 1.0f) outputBuffer[i] = 1.0f;
+        if (outputBuffer[i] < -1.0f) outputBuffer[i] = -1.0f;
     }
 
     // Advance current time based on frames processed
@@ -152,31 +165,45 @@ void HexEngine::scheduleStep(int stepIndex, double time) {
 }
 
 void HexEngine::triggerVoice(VoiceType type, double time, float gainValue, float pan, float pitchOffset) {
-    std::unique_ptr<VoiceDSP> voice;
+    // Zero-allocation trigger: Find an inactive voice in the pool and trigger it.
+    // If pool is exhausted, the oldest voice will naturally be ignored (or we could steal it,
+    // but ignoring is safer for simple percussion for now).
 
     switch (type) {
         case VoiceType::Kick:
-            voice = std::make_unique<KickDSP>();
+            for (auto& voice : m_poolKick) {
+                if (!voice.isActive()) {
+                    voice.trigger(time, gainValue, pan, pitchOffset);
+                    break;
+                }
+            }
             break;
         case VoiceType::Snare:
-            voice = std::make_unique<SnareDSP>();
+            for (auto& voice : m_poolSnare) {
+                if (!voice.isActive()) {
+                    voice.trigger(time, gainValue, pan, pitchOffset);
+                    break;
+                }
+            }
             break;
         case VoiceType::HiHat:
-            voice = std::make_unique<HiHatDSP>();
+            for (auto& voice : m_poolHiHat) {
+                if (!voice.isActive()) {
+                    voice.trigger(time, gainValue, pan, pitchOffset);
+                    break;
+                }
+            }
             break;
         case VoiceType::PercHigh:
-            voice = std::make_unique<PercDSP>(420.0f);
-            break;
         case VoiceType::PercLow:
-            voice = std::make_unique<PercDSP>(210.0f);
+            for (auto& voice : m_poolPerc) {
+                if (!voice.isActive()) {
+                    voice.setBaseFreq(type == VoiceType::PercHigh ? 420.0f : 210.0f);
+                    voice.trigger(time, gainValue, pan, pitchOffset);
+                    break;
+                }
+            }
             break;
-        default:
-            return;
-    }
-
-    if (voice) {
-        voice->trigger(time, gainValue, pan, pitchOffset);
-        m_activeVoices.push_back(std::move(voice));
     }
 }
 

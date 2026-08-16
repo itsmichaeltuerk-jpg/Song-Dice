@@ -65,9 +65,14 @@ bool KickDSP::render(float* buffer, int numFrames, double sampleRate, double cur
         if (m_phase >= 2.0 * PI) m_phase -= 2.0 * PI;
         float sample = (float)(std::sin(m_phase) * amp);
 
-        // Write to stereo interleaved buffer
-        buffer[i * 2]     += sample; // L
-        buffer[i * 2 + 1] += sample; // R
+        // Equal power panning (pan is -1.0 to 1.0)
+        float panVal = (m_pan + 1.0f) * 0.5f; // pan 0.0 to 1.0
+        float gainL = std::cos(panVal * PI * 0.5f);
+        float gainR = std::sin(panVal * PI * 0.5f);
+
+        // Write to stereo interleaved buffer (accumulate)
+        buffer[i * 2]     += sample * gainL; // L
+        buffer[i * 2 + 1] += sample * gainR; // R
     }
 
     return true;
@@ -154,8 +159,12 @@ bool SnareDSP::render(float* buffer, int numFrames, double sampleRate, double cu
 
         float sample = (toneSample * toneAmp) + (noiseSample * noiseAmp);
 
-        buffer[i * 2]     += sample; // L
-        buffer[i * 2 + 1] += sample; // R
+        float panVal = (m_pan + 1.0f) * 0.5f;
+        float gainL = std::cos(panVal * PI * 0.5f);
+        float gainR = std::sin(panVal * PI * 0.5f);
+
+        buffer[i * 2]     += sample * gainL; // L
+        buffer[i * 2 + 1] += sample * gainR; // R
     }
 
     return true;
@@ -196,8 +205,12 @@ bool HiHatDSP::render(float* buffer, int numFrames, double sampleRate, double cu
         double amp = (m_gain * 0.6) * std::exp(-timeSinceTrigger * 40.0); // Very fast decay
         float sample = noiseSample * amp;
 
-        buffer[i * 2]     += sample;
-        buffer[i * 2 + 1] += sample;
+        float panVal = (m_pan + 1.0f) * 0.5f;
+        float gainL = std::cos(panVal * PI * 0.5f);
+        float gainR = std::sin(panVal * PI * 0.5f);
+
+        buffer[i * 2]     += sample * gainL;
+        buffer[i * 2 + 1] += sample * gainR;
     }
 
     return true;
@@ -240,8 +253,12 @@ bool PercDSP::render(float* buffer, int numFrames, double sampleRate, double cur
         double amp = (m_gain * 0.75) * std::exp(-timeSinceTrigger * 15.0);
         float sample = (float)(std::sin(m_phase) * amp);
 
-        buffer[i * 2]     += sample;
-        buffer[i * 2 + 1] += sample;
+        float panVal = (m_pan + 1.0f) * 0.5f;
+        float gainL = std::cos(panVal * PI * 0.5f);
+        float gainR = std::sin(panVal * PI * 0.5f);
+
+        buffer[i * 2]     += sample * gainL;
+        buffer[i * 2 + 1] += sample * gainR;
     }
 
     return true;

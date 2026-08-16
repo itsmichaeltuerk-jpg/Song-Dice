@@ -56,8 +56,16 @@ private:
     std::unordered_map<std::string, TrackConfig> m_tracks;
     PlayheadCallback m_onStepTrigger;
 
-    // Active voices pool
-    std::vector<std::unique_ptr<VoiceDSP>> m_activeVoices;
+    // Zero-allocation object pools (fixed size)
+    static constexpr int POOL_SIZE_KICK = 4;
+    static constexpr int POOL_SIZE_SNARE = 4;
+    static constexpr int POOL_SIZE_HIHAT = 8;
+    static constexpr int POOL_SIZE_PERC = 8;
+
+    std::vector<KickDSP> m_poolKick;
+    std::vector<SnareDSP> m_poolSnare;
+    std::vector<HiHatDSP> m_poolHiHat;
+    std::vector<PercDSP> m_poolPerc;
 };
 
 } // namespace HexAudio
