@@ -49,10 +49,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.songdice.data.model.DiceParameter
 import com.example.songdice.data.model.DiceState
-import com.example.ui.theme.NeonAmber
-import com.example.ui.theme.NeonCyan
-import com.example.ui.theme.NeonPink
-import com.example.ui.theme.NeonViolet
+import com.example.ui.theme.FlatAmber
+import com.example.ui.theme.FlatCyan
+import com.example.ui.theme.FlatPink
+import com.example.ui.theme.FlatViolet
+import com.example.ui.theme.StudioBackground
 import com.example.ui.theme.StudioBorder
 import com.example.ui.theme.StudioSurface
 import com.example.ui.theme.StudioSurfaceVariant
@@ -80,27 +81,27 @@ fun DiceCard(
     }
 
     val cardBorder = if (isLocked) {
-        BorderStroke(1.5.dp, NeonAmber)
+        BorderStroke(1.dp, FlatAmber.copy(alpha = 0.5f))
     } else {
-        BorderStroke(1.dp, StudioBorder)
+        BorderStroke(1.dp, StudioBorder.copy(alpha = 0.2f))
     }
 
     val iconColor = when (parameter) {
-        DiceParameter.KEY -> NeonCyan
-        DiceParameter.PROGRESSION -> NeonViolet
-        DiceParameter.CHORD_RHYTHM -> NeonAmber
-        DiceParameter.BASS_PATTERN -> NeonViolet
-        DiceParameter.DRUM_RHYTHM -> NeonCyan
-        DiceParameter.MELODY_CONTOUR -> NeonPink
+        DiceParameter.KEY -> FlatCyan
+        DiceParameter.PROGRESSION -> FlatViolet
+        DiceParameter.CHORD_RHYTHM -> FlatAmber
+        DiceParameter.BASS_PATTERN -> FlatViolet
+        DiceParameter.DRUM_RHYTHM -> FlatCyan
+        DiceParameter.MELODY_CONTOUR -> FlatPink
     }
 
     Card(
         modifier = modifier
             .testTag("dice_card_${parameter.name}")
             .fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isLocked) StudioSurfaceVariant else StudioSurface
+            containerColor = if (isLocked) StudioSurfaceVariant.copy(alpha = 0.7f) else StudioSurface
         ),
         border = cardBorder
     ) {
@@ -148,7 +149,7 @@ fun DiceCard(
                         Text(
                             text = if (isLocked) "LOCKED" else "READY TO ROLL",
                             style = MaterialTheme.typography.labelMedium,
-                            color = if (isLocked) NeonAmber else Color.Gray,
+                            color = if (isLocked) FlatAmber else Color.Gray,
                             fontSize = 10.sp
                         )
                     }
@@ -157,8 +158,7 @@ fun DiceCard(
                 // Lock Toggle Button
                 Surface(
                     shape = RoundedCornerShape(20.dp),
-                    color = if (isLocked) NeonAmber.copy(alpha = 0.2f) else StudioSurfaceVariant,
-                    border = BorderStroke(1.dp, if (isLocked) NeonAmber else StudioBorder),
+                    color = if (isLocked) FlatAmber.copy(alpha = 0.1f) else StudioSurfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier
                         .testTag("lock_button_${parameter.name}")
                         .clickable { onToggleLock() }
@@ -170,14 +170,14 @@ fun DiceCard(
                         Icon(
                             imageVector = if (isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
                             contentDescription = if (isLocked) "Unlock parameter" else "Lock parameter",
-                            tint = if (isLocked) NeonAmber else Color.Gray,
+                            tint = if (isLocked) FlatAmber else Color.Gray,
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = if (isLocked) "LOCKED" else "LOCK",
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (isLocked) NeonAmber else Color.LightGray,
+                            color = if (isLocked) FlatAmber else Color.LightGray,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -192,8 +192,8 @@ fun DiceCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        color = Color.Black.copy(alpha = 0.3f),
-                        shape = RoundedCornerShape(10.dp)
+                        color = StudioBackground.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(8.dp)
                     )
                     .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
@@ -206,7 +206,7 @@ fun DiceCard(
                         text = diceState.value,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = if (isLocked) NeonAmber else MaterialTheme.colorScheme.onSurface,
+                        color = if (isLocked) FlatAmber else MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
@@ -219,7 +219,7 @@ fun DiceCard(
                         Icon(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = "Reroll ${parameter.displayName}",
-                            tint = if (isLocked) Color.Gray else NeonCyan,
+                            tint = if (isLocked) Color.Gray else FlatCyan,
                             modifier = Modifier.size(16.dp)
                         )
                     }
