@@ -21,6 +21,9 @@ public:
     }
 
     bool start() {
+        // Prevent resource leaks by explicitly stopping and closing any existing stream
+        stop();
+
         AudioStreamBuilder builder;
         builder.setDirection(Direction::Output)
                ->setPerformanceMode(PerformanceMode::LowLatency)
@@ -36,42 +39,6 @@ public:
         }
 
         mEngine->init(mStream->getSampleRate());
-
-        // --- HARDCODE A TEST BEAT FOR NOW (Will be exposed to Kotlin later) ---
-        TrackConfig kickTrack{"kick_1", "Kick", VoiceType::Kick, {}, 1.0f, 0.0f, false, false};
-        for (int i = 0; i < 16; i += 4) {
-            kickTrack.steps.push_back({"k" + std::to_string(i), {0,0,0}, i, true, 1.0f, 0.0f});
-        }
-
-        TrackConfig snareTrack{"snare_1", "Snare", VoiceType::Snare, {}, 0.8f, 0.0f, false, false};
-        snareTrack.steps.push_back({"s4", {0,0,0}, 4, true, 1.0f, 0.0f});
-        snareTrack.steps.push_back({"s12", {0,0,0}, 12, true, 1.0f, 0.0f});
-
-        TrackConfig hihatTrack{"hihat_1", "HiHat", VoiceType::HiHat, {}, 0.6f, 0.0f, false, false};
-        for (int i = 0; i < 16; i += 2) {
-            hihatTrack.steps.push_back({"h" + std::to_string(i), {0,0,0}, i, true, 1.0f, 0.0f});
-        }
-
-        // Add a simple bassline (C Minor)
-        TrackConfig bassTrack{"bass_1", "Bass", VoiceType::Bass, {}, 0.8f, 0.0f, false, false};
-        bassTrack.steps.push_back({"b0", {0,0,0}, 0, true, 1.0f, 0.0f}); // C
-        bassTrack.steps.push_back({"b3", {0,0,0}, 3, true, 1.0f, 0.0f}); // C
-        bassTrack.steps.push_back({"b8", {0,0,0}, 8, true, 1.0f, 3.0f}); // Eb
-        bassTrack.steps.push_back({"b11", {0,0,0}, 11, true, 1.0f, 3.0f});// Eb
-        bassTrack.steps.push_back({"b14", {0,0,0}, 14, true, 1.0f, -2.0f}); // Bb
-
-        // Add a simple chord progression on the downbeats
-        TrackConfig chordTrack{"chord_1", "Chords", VoiceType::Chord, {}, 0.7f, 0.0f, false, false};
-        chordTrack.steps.push_back({"c0", {0,0,0}, 0, true, 1.0f, 0.0f}); // Cm7
-        chordTrack.steps.push_back({"c8", {0,0,0}, 8, true, 1.0f, -5.0f}); // Fm7
-
-        mEngine->registerTrack(kickTrack);
-        mEngine->registerTrack(snareTrack);
-        mEngine->registerTrack(hihatTrack);
-        mEngine->registerTrack(bassTrack);
-        mEngine->registerTrack(chordTrack);
-        // --------------------------------------------------------------------
-
         mEngine->start();
 
         result = mStream->requestStart();
@@ -86,8 +53,10 @@ public:
 
     void stop() {
         if (mStream) {
-            mStream->stop();
-            mStream->close();
+            if (mStream->getState() != StreamState::Closed && mStream->getState() != StreamState::Closing) {
+                mStream->stop();
+                mStream->close();
+            }
             mStream.reset();
         }
         if (mEngine) {
@@ -99,6 +68,26 @@ public:
     void setBpm(double bpm) {
         if (mEngine) {
             mEngine->setBpm(bpm);
+        }
+    }
+
+    void clearTracks() {
+        if (mEngine) {
+            mEngine->clearTracks();
+        }
+    }
+
+    void addTrack(const std::string& id, const std::string& name, VoiceType type, float gain) {
+        if (mEngine) {
+            TrackConfig track{id, name, type, {}, gain, 0.0f, false, false};
+            mEngine->registerTrack(track);
+        }
+    }
+
+    void addStep(const std::string& trackId, int stepIndex, float velocity, float pitchOffset) {
+        if (mEngine) {
+            HexStep step{"s_" + std::to_string(stepIndex), {0,0,0}, stepIndex, true, velocity, pitchOffset};
+            mEngine->addStepToTrack(trackId, step);
         }
     }
 
@@ -163,6 +152,37 @@ Java_com_example_songdice_audio_HexAudioPlayer_releaseEngineNative(JNIEnv *env, 
     if (gPlayer) {
         delete gPlayer;
         gPlayer = nullptr;
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_songdice_audio_HexAudioPlayer_clearTracksNative(JNIEnv *env, jobject thiz) {
+    if (gPlayer) {
+        gPlayer->clearTracks();
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_songdice_audio_HexAudioPlayer_addTrackNative(JNIEnv *env, jobject thiz, jstring jId, jstring jName, jint jType, jfloat gain) {
+    if (gPlayer) {
+        const char *idChars = env->GetStringUTFChars(jId, 0);
+        const char *nameChars = env->GetStringUTFChars(jName, 0);
+
+        gPlayer->addTrack(std::string(idChars), std::string(nameChars), static_cast<VoiceType>(jType), gain);
+
+        env->ReleaseStringUTFChars(jId, idChars);
+        env->ReleaseStringUTFChars(jName, nameChars);
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_example_songdice_audio_HexAudioPlayer_addStepNative(JNIEnv *env, jobject thiz, jstring jTrackId, jint stepIndex, jfloat velocity, jfloat pitchOffset) {
+    if (gPlayer) {
+        const char *idChars = env->GetStringUTFChars(jTrackId, 0);
+
+        gPlayer->addStep(std::string(idChars), stepIndex, velocity, pitchOffset);
+
+        env->ReleaseStringUTFChars(jTrackId, idChars);
     }
 }
 

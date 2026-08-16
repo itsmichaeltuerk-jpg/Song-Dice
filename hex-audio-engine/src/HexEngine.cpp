@@ -53,6 +53,17 @@ void HexEngine::registerTrack(const TrackConfig& track) {
     m_tracks[track.id] = track;
 }
 
+void HexEngine::clearTracks() {
+    m_tracks.clear();
+}
+
+void HexEngine::addStepToTrack(const std::string& trackId, const HexStep& step) {
+    auto it = m_tracks.find(trackId);
+    if (it != m_tracks.end()) {
+        it->second.steps.push_back(step);
+    }
+}
+
 void HexEngine::setStepState(const std::string& trackId, int stepIndex, bool active, float velocity) {
     auto it = m_tracks.find(trackId);
     if (it != m_tracks.end()) {

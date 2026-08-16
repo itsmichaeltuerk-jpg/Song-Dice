@@ -28,6 +28,8 @@ public:
 
     // Track & Pattern Management
     void registerTrack(const TrackConfig& track);
+    void clearTracks();
+    void addStepToTrack(const std::string& trackId, const HexStep& step);
     void setStepState(const std::string& trackId, int stepIndex, bool active, float velocity = 1.0f);
     void setBpm(double newBpm);
     void setMasterVolume(float value);

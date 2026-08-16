@@ -9,7 +9,7 @@ import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.songdice.audio.AudioSynthPlayer
+import com.example.songdice.audio.HexAudioPlayer
 import com.example.songdice.data.midi.MidiEncoder
 import com.example.songdice.data.model.DiceParameter
 import com.example.songdice.data.model.DiceState
@@ -43,7 +43,7 @@ data class SongDiceUiState(
 
 class SongDiceViewModel(
     private val repository: SongDiceRepository = SongDiceRepository(),
-    private val audioPlayer: AudioSynthPlayer = AudioSynthPlayer()
+    private val audioPlayer: HexAudioPlayer = HexAudioPlayer()
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SongDiceUiState())
@@ -65,7 +65,7 @@ class SongDiceViewModel(
         }
         viewModelScope.launch {
             audioPlayer.playbackProgressBeats.collect { beats ->
-                _uiState.update { it.copy(playbackProgressBeats = beats) }
+                _uiState.update { it.copy(playbackProgressBeats = beats.toDouble()) }
             }
         }
 

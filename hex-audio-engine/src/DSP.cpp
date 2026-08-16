@@ -1,6 +1,7 @@
 #include "DSP.h"
 #include <cmath>
 #include <cstdlib>
+#include <cstdint>
 
 namespace HexAudio {
 
@@ -273,9 +274,12 @@ double OnePoleFilter::process(double input) {
 }
 
 // --- Helper for Noise ---
+// Lock-free Linear Congruential Generator (LCG) for real-time safe PRNG
+static uint32_t lcg_state = 12345;
 static float generateNoise() {
-    // Simple PRNG between -1 and 1
-    return ((float)std::rand() / (float)RAND_MAX) * 2.0f - 1.0f;
+    lcg_state = 1664525 * lcg_state + 1013904223;
+    // Convert to float between -1.0 and 1.0
+    return ((float)lcg_state / (float)0xFFFFFFFF) * 2.0f - 1.0f;
 }
 
 // --- SnareDSP ---
