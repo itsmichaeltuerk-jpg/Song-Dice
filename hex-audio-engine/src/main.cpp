@@ -74,9 +74,24 @@ int main() {
         hihatTrack.steps.push_back({"h" + std::to_string(i), {0,0,0}, i, true, 1.0f, 0.0f});
     }
 
+    // Add a simple bassline (C Minor)
+    TrackConfig bassTrack{"bass_1", "Bass", VoiceType::Bass, {}, 0.8f, 0.0f, false, false};
+    bassTrack.steps.push_back({"b0", {0,0,0}, 0, true, 1.0f, 0.0f}); // C
+    bassTrack.steps.push_back({"b3", {0,0,0}, 3, true, 1.0f, 0.0f}); // C
+    bassTrack.steps.push_back({"b8", {0,0,0}, 8, true, 1.0f, 3.0f}); // Eb
+    bassTrack.steps.push_back({"b11", {0,0,0}, 11, true, 1.0f, 3.0f});// Eb
+    bassTrack.steps.push_back({"b14", {0,0,0}, 14, true, 1.0f, -2.0f}); // Bb
+
+    // Add a simple chord progression on the downbeats
+    TrackConfig chordTrack{"chord_1", "Chords", VoiceType::Chord, {}, 0.7f, 0.0f, false, false};
+    chordTrack.steps.push_back({"c0", {0,0,0}, 0, true, 1.0f, 0.0f}); // Cm7
+    chordTrack.steps.push_back({"c8", {0,0,0}, 8, true, 1.0f, -5.0f}); // Fm7
+
     engine.registerTrack(kickTrack);
     engine.registerTrack(snareTrack);
     engine.registerTrack(hihatTrack);
+    engine.registerTrack(bassTrack);
+    engine.registerTrack(chordTrack);
 
     engine.start();
 

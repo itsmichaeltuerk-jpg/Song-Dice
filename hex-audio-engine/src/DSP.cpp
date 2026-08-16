@@ -78,6 +78,172 @@ bool KickDSP::render(float* buffer, int numFrames, double sampleRate, double cur
     return true;
 }
 
+// --- BassDSP ---
+BassDSP::BassDSP() : m_triggerTime(0), m_gain(0), m_pan(0), m_pitchOffset(0), m_active(false), m_phase(0) {}
+
+void BassDSP::trigger(double time, float gain, float pan, float pitchOffset) {
+    m_triggerTime = time;
+    m_gain = gain;
+    m_pan = pan;
+    m_pitchOffset = pitchOffset;
+    m_active = true;
+    m_phase = 0.0;
+}
+
+bool BassDSP::render(float* buffer, int numFrames, double sampleRate, double currentTime) {
+    if (!m_active) return false;
+    double duration = 0.4;
+    if (currentTime > m_triggerTime + duration) {
+        m_active = false;
+        return false;
+    }
+
+    // Lowpass filter for subby tone
+    m_filter.setBandpass(400.0, sampleRate); // approximation for lowpass in this simple 1-pole
+
+    for (int i = 0; i < numFrames; ++i) {
+        double t = currentTime + (i / sampleRate);
+        if (t < m_triggerTime) continue;
+
+        double timeSinceTrigger = t - m_triggerTime;
+
+        // Base freq C2 roughly ~65Hz
+        double freq = 65.41 * std::pow(2.0, m_pitchOffset / 12.0);
+
+        m_phase += (2.0 * PI * freq) / sampleRate;
+        if (m_phase >= 2.0 * PI) m_phase -= 2.0 * PI;
+
+        // Sawtooth approx
+        float saw = (float)(2.0 * (m_phase / (2.0 * PI)) - 1.0);
+        float sample = m_filter.process(saw);
+
+        double amp = m_gain * std::exp(-timeSinceTrigger * 5.0);
+        sample *= amp;
+
+        float panVal = (m_pan + 1.0f) * 0.5f;
+        float gainL = std::cos(panVal * PI * 0.5f);
+        float gainR = std::sin(panVal * PI * 0.5f);
+
+        buffer[i * 2]     += sample * gainL;
+        buffer[i * 2 + 1] += sample * gainR;
+    }
+    return true;
+}
+
+// --- ChordDSP ---
+ChordDSP::ChordDSP() : m_triggerTime(0), m_gain(0), m_pan(0), m_pitchOffset(0), m_active(false), m_phase1(0), m_phase2(0), m_phase3(0) {}
+
+void ChordDSP::trigger(double time, float gain, float pan, float pitchOffset) {
+    m_triggerTime = time;
+    m_gain = gain;
+    m_pan = pan;
+    m_pitchOffset = pitchOffset;
+    m_active = true;
+    m_phase1 = 0.0;
+    m_phase2 = 0.0;
+    m_phase3 = 0.0;
+}
+
+bool ChordDSP::render(float* buffer, int numFrames, double sampleRate, double currentTime) {
+    if (!m_active) return false;
+    double duration = 0.8;
+    if (currentTime > m_triggerTime + duration) {
+        m_active = false;
+        return false;
+    }
+
+    // Mellow tone
+    m_filter.setBandpass(1200.0, sampleRate);
+
+    for (int i = 0; i < numFrames; ++i) {
+        double t = currentTime + (i / sampleRate);
+        if (t < m_triggerTime) continue;
+
+        double timeSinceTrigger = t - m_triggerTime;
+
+        // Base freq C3 ~130.81Hz. Play a Minor 7th chord (root, minor 3rd, minor 7th)
+        double rootFreq = 130.81 * std::pow(2.0, m_pitchOffset / 12.0);
+        double thirdFreq = rootFreq * std::pow(2.0, 3.0/12.0);
+        double seventhFreq = rootFreq * std::pow(2.0, 10.0/12.0);
+
+        m_phase1 += (2.0 * PI * rootFreq) / sampleRate;
+        m_phase2 += (2.0 * PI * thirdFreq) / sampleRate;
+        m_phase3 += (2.0 * PI * seventhFreq) / sampleRate;
+
+        if (m_phase1 >= 2.0 * PI) m_phase1 -= 2.0 * PI;
+        if (m_phase2 >= 2.0 * PI) m_phase2 -= 2.0 * PI;
+        if (m_phase3 >= 2.0 * PI) m_phase3 -= 2.0 * PI;
+
+        // Sines
+        float s1 = (float)std::sin(m_phase1);
+        float s2 = (float)std::sin(m_phase2);
+        float s3 = (float)std::sin(m_phase3);
+
+        float mixed = (s1 + s2 + s3) * 0.33f;
+        float sample = m_filter.process(mixed);
+
+        // Envelope with slightly slower decay
+        double amp = m_gain * std::exp(-timeSinceTrigger * 3.0);
+        sample *= amp;
+
+        float panVal = (m_pan + 1.0f) * 0.5f;
+        float gainL = std::cos(panVal * PI * 0.5f);
+        float gainR = std::sin(panVal * PI * 0.5f);
+
+        buffer[i * 2]     += sample * gainL;
+        buffer[i * 2 + 1] += sample * gainR;
+    }
+    return true;
+}
+
+// --- MelodyDSP ---
+MelodyDSP::MelodyDSP() : m_triggerTime(0), m_gain(0), m_pan(0), m_pitchOffset(0), m_active(false), m_phase(0) {}
+
+void MelodyDSP::trigger(double time, float gain, float pan, float pitchOffset) {
+    m_triggerTime = time;
+    m_gain = gain;
+    m_pan = pan;
+    m_pitchOffset = pitchOffset;
+    m_active = true;
+    m_phase = 0.0;
+}
+
+bool MelodyDSP::render(float* buffer, int numFrames, double sampleRate, double currentTime) {
+    if (!m_active) return false;
+    double duration = 0.3;
+    if (currentTime > m_triggerTime + duration) {
+        m_active = false;
+        return false;
+    }
+
+    for (int i = 0; i < numFrames; ++i) {
+        double t = currentTime + (i / sampleRate);
+        if (t < m_triggerTime) continue;
+
+        double timeSinceTrigger = t - m_triggerTime;
+
+        // Base freq C4 ~261.63Hz
+        double freq = 261.63 * std::pow(2.0, m_pitchOffset / 12.0);
+
+        m_phase += (2.0 * PI * freq) / sampleRate;
+        if (m_phase >= 2.0 * PI) m_phase -= 2.0 * PI;
+
+        // Triangle wave
+        float sample = 2.0f * std::abs(2.0f * ((float)(m_phase / (2.0 * PI)) - std::floor((float)(m_phase / (2.0 * PI)) + 0.5f))) - 1.0f;
+
+        double amp = m_gain * std::exp(-timeSinceTrigger * 8.0);
+        sample *= amp;
+
+        float panVal = (m_pan + 1.0f) * 0.5f;
+        float gainL = std::cos(panVal * PI * 0.5f);
+        float gainR = std::sin(panVal * PI * 0.5f);
+
+        buffer[i * 2]     += sample * gainL;
+        buffer[i * 2 + 1] += sample * gainR;
+    }
+    return true;
+}
+
 // --- OnePoleFilter ---
 
 OnePoleFilter::OnePoleFilter() : m_a0(1.0), m_b1(0.0), m_z1(0.0), m_isHighpass(false) {}

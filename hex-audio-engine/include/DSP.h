@@ -125,4 +125,62 @@ private:
     double m_phase;
 };
 
+// Bass Synth (Subby Saw/Square)
+class BassDSP : public VoiceDSP {
+public:
+    BassDSP();
+    void trigger(double time, float gain, float pan, float pitchOffset) override;
+    bool render(float* buffer, int numFrames, double sampleRate, double currentTime) override;
+    bool isActive() const override { return m_active; }
+
+private:
+    double m_triggerTime;
+    float m_gain;
+    float m_pan;
+    float m_pitchOffset;
+    bool m_active;
+
+    double m_phase;
+    OnePoleFilter m_filter;
+};
+
+// Chord Synth (Polyphonic EPiano vibe)
+class ChordDSP : public VoiceDSP {
+public:
+    ChordDSP();
+    void trigger(double time, float gain, float pan, float pitchOffset) override;
+    bool render(float* buffer, int numFrames, double sampleRate, double currentTime) override;
+    bool isActive() const override { return m_active; }
+
+private:
+    double m_triggerTime;
+    float m_gain;
+    float m_pan;
+    float m_pitchOffset;
+    bool m_active;
+
+    double m_phase1;
+    double m_phase2;
+    double m_phase3;
+    OnePoleFilter m_filter;
+};
+
+// Melody Synth (Lead)
+class MelodyDSP : public VoiceDSP {
+public:
+    MelodyDSP();
+    void trigger(double time, float gain, float pan, float pitchOffset) override;
+    bool render(float* buffer, int numFrames, double sampleRate, double currentTime) override;
+    bool isActive() const override { return m_active; }
+
+private:
+    double m_triggerTime;
+    float m_gain;
+    float m_pan;
+    float m_pitchOffset;
+    bool m_active;
+
+    double m_phase;
+};
+
 } // namespace HexAudio

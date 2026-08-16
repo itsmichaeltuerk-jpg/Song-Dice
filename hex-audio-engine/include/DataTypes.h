@@ -29,7 +29,10 @@ enum class VoiceType {
     Snare,
     HiHat,
     PercHigh,
-    PercLow
+    PercLow,
+    Bass,
+    Chord,
+    Melody
 };
 
 struct TrackConfig {

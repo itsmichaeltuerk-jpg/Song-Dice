@@ -22,6 +22,9 @@ HexEngine::HexEngine(double initialBpm, int totalSteps)
     m_poolSnare.resize(POOL_SIZE_SNARE);
     m_poolHiHat.resize(POOL_SIZE_HIHAT);
     m_poolPerc.resize(POOL_SIZE_PERC);
+    m_poolBass.resize(POOL_SIZE_BASS);
+    m_poolChord.resize(POOL_SIZE_CHORD);
+    m_poolMelody.resize(POOL_SIZE_MELODY);
 }
 
 HexEngine::~HexEngine() {
@@ -102,6 +105,15 @@ void HexEngine::processAudio(float* outputBuffer, int numFrames) {
         if (voice.isActive()) voice.render(outputBuffer, numFrames, m_sampleRate, m_currentTime);
     }
     for (auto& voice : m_poolPerc) {
+        if (voice.isActive()) voice.render(outputBuffer, numFrames, m_sampleRate, m_currentTime);
+    }
+    for (auto& voice : m_poolBass) {
+        if (voice.isActive()) voice.render(outputBuffer, numFrames, m_sampleRate, m_currentTime);
+    }
+    for (auto& voice : m_poolChord) {
+        if (voice.isActive()) voice.render(outputBuffer, numFrames, m_sampleRate, m_currentTime);
+    }
+    for (auto& voice : m_poolMelody) {
         if (voice.isActive()) voice.render(outputBuffer, numFrames, m_sampleRate, m_currentTime);
     }
 
@@ -199,6 +211,30 @@ void HexEngine::triggerVoice(VoiceType type, double time, float gainValue, float
             for (auto& voice : m_poolPerc) {
                 if (!voice.isActive()) {
                     voice.setBaseFreq(type == VoiceType::PercHigh ? 420.0f : 210.0f);
+                    voice.trigger(time, gainValue, pan, pitchOffset);
+                    break;
+                }
+            }
+            break;
+        case VoiceType::Bass:
+            for (auto& voice : m_poolBass) {
+                if (!voice.isActive()) {
+                    voice.trigger(time, gainValue, pan, pitchOffset);
+                    break;
+                }
+            }
+            break;
+        case VoiceType::Chord:
+            for (auto& voice : m_poolChord) {
+                if (!voice.isActive()) {
+                    voice.trigger(time, gainValue, pan, pitchOffset);
+                    break;
+                }
+            }
+            break;
+        case VoiceType::Melody:
+            for (auto& voice : m_poolMelody) {
+                if (!voice.isActive()) {
                     voice.trigger(time, gainValue, pan, pitchOffset);
                     break;
                 }

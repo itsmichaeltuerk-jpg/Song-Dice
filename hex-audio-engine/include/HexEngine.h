@@ -61,11 +61,17 @@ private:
     static constexpr int POOL_SIZE_SNARE = 4;
     static constexpr int POOL_SIZE_HIHAT = 8;
     static constexpr int POOL_SIZE_PERC = 8;
+    static constexpr int POOL_SIZE_BASS = 4;
+    static constexpr int POOL_SIZE_CHORD = 8;
+    static constexpr int POOL_SIZE_MELODY = 8;
 
     std::vector<KickDSP> m_poolKick;
     std::vector<SnareDSP> m_poolSnare;
     std::vector<HiHatDSP> m_poolHiHat;
     std::vector<PercDSP> m_poolPerc;
+    std::vector<BassDSP> m_poolBass;
+    std::vector<ChordDSP> m_poolChord;
+    std::vector<MelodyDSP> m_poolMelody;
 };
 
 } // namespace HexAudio
