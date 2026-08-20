@@ -16,6 +16,15 @@ HexEngine::HexEngine(double initialBpm, int totalSteps)
       m_currentTime(0.0),
       m_totalSteps(totalSteps),
       m_onStepTrigger(nullptr) {
+
+    // Pre-allocate voice pools to avoid GC/malloc on real-time thread
+    m_poolKick.resize(POOL_SIZE_KICK);
+    m_poolSnare.resize(POOL_SIZE_SNARE);
+    m_poolHiHat.resize(POOL_SIZE_HIHAT);
+    m_poolPerc.resize(POOL_SIZE_PERC);
+    m_poolBass.resize(POOL_SIZE_BASS);
+    m_poolChord.resize(POOL_SIZE_CHORD);
+    m_poolMelody.resize(POOL_SIZE_MELODY);
 }
 
 HexEngine::~HexEngine() {
@@ -44,6 +53,17 @@ void HexEngine::registerTrack(const TrackConfig& track) {
     m_tracks[track.id] = track;
 }
 
+void HexEngine::clearTracks() {
+    m_tracks.clear();
+}
+
+void HexEngine::addStepToTrack(const std::string& trackId, const HexStep& step) {
+    auto it = m_tracks.find(trackId);
+    if (it != m_tracks.end()) {
+        it->second.steps.push_back(step);
+    }
+}
+
 void HexEngine::setStepState(const std::string& trackId, int stepIndex, bool active, float velocity) {
     auto it = m_tracks.find(trackId);
     if (it != m_tracks.end()) {
@@ -70,22 +90,52 @@ void HexEngine::setOnStepTrigger(PlayheadCallback callback) {
 }
 
 void HexEngine::processAudio(float* outputBuffer, int numFrames) {
+    // Clear buffer (silence)
+    for (int i = 0; i < numFrames * 2; ++i) {
+        outputBuffer[i] = 0.0f;
+    }
+
     if (!m_isRunning) {
-        // Output silence
-        for (int i = 0; i < numFrames * 2; ++i) {
-            outputBuffer[i] = 0.0f;
-        }
         return;
     }
 
     // A real C++ engine runs the scheduler based on processed samples
-    // rather than relying on a Javascript setInterval.
     scheduler();
 
-    // TODO: Process DSP objects and fill outputBuffer...
-    // For now, output silence in the stub.
+    // The render functions already accumulate into the buffer using +=
+    // BUT we need to apply Master Volume at the end, so we process voices natively
+    // directly into outputBuffer (zero temp allocation)
+
+    for (auto& voice : m_poolKick) {
+        if (voice.isActive()) voice.render(outputBuffer, numFrames, m_sampleRate, m_currentTime);
+    }
+    for (auto& voice : m_poolSnare) {
+        if (voice.isActive()) voice.render(outputBuffer, numFrames, m_sampleRate, m_currentTime);
+    }
+    for (auto& voice : m_poolHiHat) {
+        if (voice.isActive()) voice.render(outputBuffer, numFrames, m_sampleRate, m_currentTime);
+    }
+    for (auto& voice : m_poolPerc) {
+        if (voice.isActive()) voice.render(outputBuffer, numFrames, m_sampleRate, m_currentTime);
+    }
+    for (auto& voice : m_poolBass) {
+        if (voice.isActive()) voice.render(outputBuffer, numFrames, m_sampleRate, m_currentTime);
+    }
+    for (auto& voice : m_poolChord) {
+        if (voice.isActive()) voice.render(outputBuffer, numFrames, m_sampleRate, m_currentTime);
+    }
+    for (auto& voice : m_poolMelody) {
+        if (voice.isActive()) voice.render(outputBuffer, numFrames, m_sampleRate, m_currentTime);
+    }
+
+    // Apply master volume and simple soft-clipping limiter directly on the buffer
     for (int i = 0; i < numFrames * 2; ++i) {
-        outputBuffer[i] = 0.0f;
+        outputBuffer[i] *= m_masterVolume;
+
+        // Soft clipping / Limiter (tanh approx) to prevent harsh digital clipping
+        // when multiple loud voices stack up
+        if (outputBuffer[i] > 1.0f) outputBuffer[i] = 1.0f;
+        if (outputBuffer[i] < -1.0f) outputBuffer[i] = -1.0f;
     }
 
     // Advance current time based on frames processed
@@ -138,9 +188,70 @@ void HexEngine::scheduleStep(int stepIndex, double time) {
 }
 
 void HexEngine::triggerVoice(VoiceType type, double time, float gainValue, float pan, float pitchOffset) {
-    // TODO: Instantiate/trigger DSP voices here based on type.
-    // Example: Kick, Snare, HiHat
-    // std::cout << "Triggering voice: " << (int)type << " at time " << time << std::endl;
+    // Zero-allocation trigger: Find an inactive voice in the pool and trigger it.
+    // If pool is exhausted, the oldest voice will naturally be ignored (or we could steal it,
+    // but ignoring is safer for simple percussion for now).
+
+    switch (type) {
+        case VoiceType::Kick:
+            for (auto& voice : m_poolKick) {
+                if (!voice.isActive()) {
+                    voice.trigger(time, gainValue, pan, pitchOffset);
+                    break;
+                }
+            }
+            break;
+        case VoiceType::Snare:
+            for (auto& voice : m_poolSnare) {
+                if (!voice.isActive()) {
+                    voice.trigger(time, gainValue, pan, pitchOffset);
+                    break;
+                }
+            }
+            break;
+        case VoiceType::HiHat:
+            for (auto& voice : m_poolHiHat) {
+                if (!voice.isActive()) {
+                    voice.trigger(time, gainValue, pan, pitchOffset);
+                    break;
+                }
+            }
+            break;
+        case VoiceType::PercHigh:
+        case VoiceType::PercLow:
+            for (auto& voice : m_poolPerc) {
+                if (!voice.isActive()) {
+                    voice.setBaseFreq(type == VoiceType::PercHigh ? 420.0f : 210.0f);
+                    voice.trigger(time, gainValue, pan, pitchOffset);
+                    break;
+                }
+            }
+            break;
+        case VoiceType::Bass:
+            for (auto& voice : m_poolBass) {
+                if (!voice.isActive()) {
+                    voice.trigger(time, gainValue, pan, pitchOffset);
+                    break;
+                }
+            }
+            break;
+        case VoiceType::Chord:
+            for (auto& voice : m_poolChord) {
+                if (!voice.isActive()) {
+                    voice.trigger(time, gainValue, pan, pitchOffset);
+                    break;
+                }
+            }
+            break;
+        case VoiceType::Melody:
+            for (auto& voice : m_poolMelody) {
+                if (!voice.isActive()) {
+                    voice.trigger(time, gainValue, pan, pitchOffset);
+                    break;
+                }
+            }
+            break;
+    }
 }
 
 } // namespace HexAudio

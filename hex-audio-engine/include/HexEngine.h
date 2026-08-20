@@ -1,9 +1,12 @@
 #pragma once
 
 #include "DataTypes.h"
+#include "DSP.h"
 #include <unordered_map>
 #include <string>
 #include <functional>
+#include <memory>
+#include <vector>
 
 namespace HexAudio {
 
@@ -25,6 +28,8 @@ public:
 
     // Track & Pattern Management
     void registerTrack(const TrackConfig& track);
+    void clearTracks();
+    void addStepToTrack(const std::string& trackId, const HexStep& step);
     void setStepState(const std::string& trackId, int stepIndex, bool active, float velocity = 1.0f);
     void setBpm(double newBpm);
     void setMasterVolume(float value);
@@ -52,6 +57,23 @@ private:
 
     std::unordered_map<std::string, TrackConfig> m_tracks;
     PlayheadCallback m_onStepTrigger;
+
+    // Zero-allocation object pools (fixed size)
+    static constexpr int POOL_SIZE_KICK = 4;
+    static constexpr int POOL_SIZE_SNARE = 4;
+    static constexpr int POOL_SIZE_HIHAT = 8;
+    static constexpr int POOL_SIZE_PERC = 8;
+    static constexpr int POOL_SIZE_BASS = 4;
+    static constexpr int POOL_SIZE_CHORD = 8;
+    static constexpr int POOL_SIZE_MELODY = 8;
+
+    std::vector<KickDSP> m_poolKick;
+    std::vector<SnareDSP> m_poolSnare;
+    std::vector<HiHatDSP> m_poolHiHat;
+    std::vector<PercDSP> m_poolPerc;
+    std::vector<BassDSP> m_poolBass;
+    std::vector<ChordDSP> m_poolChord;
+    std::vector<MelodyDSP> m_poolMelody;
 };
 
 } // namespace HexAudio

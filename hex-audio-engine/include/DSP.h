@@ -28,9 +28,11 @@ public:
 
     virtual void trigger(double time, float gain, float pan, float pitchOffset) = 0;
 
-    // Renders the voice output into a stereo interleaved buffer
+    // Renders the voice output into a stereo interleaved buffer (accumulates using +=)
     // Returns true if the voice is still active (making sound), false if finished
     virtual bool render(float* buffer, int numFrames, double sampleRate, double currentTime) = 0;
+
+    virtual bool isActive() const = 0;
 };
 
 // Kick Drum Procedural Synth
@@ -39,6 +41,7 @@ public:
     KickDSP();
     void trigger(double time, float gain, float pan, float pitchOffset) override;
     bool render(float* buffer, int numFrames, double sampleRate, double currentTime) override;
+    bool isActive() const override { return m_active; }
 
 private:
     double m_triggerTime;
@@ -51,12 +54,27 @@ private:
     double m_phase;
 };
 
+// Simple One Pole Filter to replace Biquad for now
+class OnePoleFilter {
+public:
+    OnePoleFilter();
+    void setHighpass(double cutoff, double sampleRate);
+    void setBandpass(double cutoff, double sampleRate); // approximation
+    double process(double input);
+
+private:
+    double m_a0, m_b1;
+    double m_z1;
+    bool m_isHighpass;
+};
+
 // Snare Drum Procedural Synth
 class SnareDSP : public VoiceDSP {
 public:
     SnareDSP();
     void trigger(double time, float gain, float pan, float pitchOffset) override;
     bool render(float* buffer, int numFrames, double sampleRate, double currentTime) override;
+    bool isActive() const override { return m_active; }
 
 private:
     double m_triggerTime;
@@ -66,6 +84,7 @@ private:
     bool m_active;
 
     double m_phaseTone;
+    OnePoleFilter m_filter;
 };
 
 // HiHat Procedural Synth
@@ -74,6 +93,7 @@ public:
     HiHatDSP();
     void trigger(double time, float gain, float pan, float pitchOffset) override;
     bool render(float* buffer, int numFrames, double sampleRate, double currentTime) override;
+    bool isActive() const override { return m_active; }
 
 private:
     double m_triggerTime;
@@ -81,17 +101,79 @@ private:
     float m_pan;
     float m_pitchOffset;
     bool m_active;
+
+    OnePoleFilter m_filter;
 };
 
 // Percussion Synth (High/Low)
 class PercDSP : public VoiceDSP {
 public:
-    PercDSP(float baseFreq);
+    PercDSP(float baseFreq = 420.0f);
+    void setBaseFreq(float baseFreq) { m_baseFreq = baseFreq; }
     void trigger(double time, float gain, float pan, float pitchOffset) override;
     bool render(float* buffer, int numFrames, double sampleRate, double currentTime) override;
+    bool isActive() const override { return m_active; }
 
 private:
     float m_baseFreq;
+    double m_triggerTime;
+    float m_gain;
+    float m_pan;
+    float m_pitchOffset;
+    bool m_active;
+
+    double m_phase;
+};
+
+// Bass Synth (Subby Saw/Square)
+class BassDSP : public VoiceDSP {
+public:
+    BassDSP();
+    void trigger(double time, float gain, float pan, float pitchOffset) override;
+    bool render(float* buffer, int numFrames, double sampleRate, double currentTime) override;
+    bool isActive() const override { return m_active; }
+
+private:
+    double m_triggerTime;
+    float m_gain;
+    float m_pan;
+    float m_pitchOffset;
+    bool m_active;
+
+    double m_phase;
+    OnePoleFilter m_filter;
+};
+
+// Chord Synth (Polyphonic EPiano vibe)
+class ChordDSP : public VoiceDSP {
+public:
+    ChordDSP();
+    void trigger(double time, float gain, float pan, float pitchOffset) override;
+    bool render(float* buffer, int numFrames, double sampleRate, double currentTime) override;
+    bool isActive() const override { return m_active; }
+
+private:
+    double m_triggerTime;
+    float m_gain;
+    float m_pan;
+    float m_pitchOffset;
+    bool m_active;
+
+    double m_phase1;
+    double m_phase2;
+    double m_phase3;
+    OnePoleFilter m_filter;
+};
+
+// Melody Synth (Lead)
+class MelodyDSP : public VoiceDSP {
+public:
+    MelodyDSP();
+    void trigger(double time, float gain, float pan, float pitchOffset) override;
+    bool render(float* buffer, int numFrames, double sampleRate, double currentTime) override;
+    bool isActive() const override { return m_active; }
+
+private:
     double m_triggerTime;
     float m_gain;
     float m_pan;

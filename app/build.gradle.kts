@@ -55,6 +55,30 @@ android {
   buildFeatures {
     compose = true
     buildConfig = true
+    prefab = true
+  }
+
+  defaultConfig {
+    applicationId = "com.aistudio.songdice.a8f2k1"
+    minSdk = 24
+    targetSdk = 36
+    versionCode = 1
+    versionName = "1.0"
+
+    testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+    externalNativeBuild {
+      cmake {
+        arguments("-DANDROID_STL=c++_shared")
+      }
+    }
+  }
+
+  externalNativeBuild {
+    cmake {
+        path = file("src/main/cpp/CMakeLists.txt")
+        version = "3.22.1"
+    }
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
   dependenciesInfo {
@@ -118,6 +142,9 @@ dependencies {
   implementation(libs.okhttp)
   // implementation(libs.play.services.location)
   implementation(libs.retrofit)
+
+  // Oboe C++ Audio Library
+  implementation("com.google.oboe:oboe:1.8.1")
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)
   testImplementation(libs.androidx.junit)
