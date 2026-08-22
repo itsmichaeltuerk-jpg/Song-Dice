@@ -10,6 +10,8 @@ import com.example.songdice.data.model.SongArrangement
  */
 object LeadSheetFormatter {
 
+    operator fun invoke(): LeadSheetFormatter = this
+
     private val NOTE_NAMES = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 
     /**

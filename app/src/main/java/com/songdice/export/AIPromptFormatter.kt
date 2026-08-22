@@ -12,6 +12,8 @@ import com.example.songdice.data.model.SongArrangement
  */
 object AIPromptFormatter {
 
+    operator fun invoke(): AIPromptFormatter = this
+
     /**
      * Container for decoupled style and production metadata.
      */

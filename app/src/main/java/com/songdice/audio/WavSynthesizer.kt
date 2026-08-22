@@ -22,6 +22,8 @@ import kotlin.random.Random
  */
 object WavSynthesizer {
 
+    operator fun invoke(): WavSynthesizer = this
+
     const val SAMPLE_RATE = 44100
     const val NUM_CHANNELS = 2
     const val BITS_PER_SAMPLE = 16
