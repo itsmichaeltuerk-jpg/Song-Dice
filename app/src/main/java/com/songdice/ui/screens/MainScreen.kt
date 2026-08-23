@@ -2,9 +2,6 @@ package com.songdice.ui.screens
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,17 +53,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.songdice.ui.components.DiceRollButton
 import com.songdice.ui.components.MetadataCard
-import com.songdice.ui.components.TrackAuditionRow
-import com.songdice.ui.components.WaveformVisualizer
+import com.songdice.ui.components.ModularDiceGrid
+import com.songdice.ui.components.MultiTrackVisualizer
 import com.songdice.ui.viewmodel.RollingState
 import com.songdice.ui.viewmodel.SongDiceViewModel
 
 /**
- * Primary Main Screen Composable integrating Milestone 1 & 2 components:
- * Top Header, Dice Roll Button, Metadata Card, Audio Waveform Visualizer, Track Audition Controls,
- * SAF (Storage Access Framework) file export, and Android Native Share Sheet integration.
+ * Primary Main Screen Composable integrating Modular Interactive Dice Grid,
+ * Metadata Card, Multi-Track Waveform Visualizer, SAF Export, and Share Sheet.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -235,12 +230,14 @@ fun MainScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 1. Primary Dice Roll Trigger
+            // 1. Modular Interactive Dice Grid
             item {
-                DiceRollButton(
+                ModularDiceGrid(
+                    blueprint = uiState.blueprint,
                     isRolling = (uiState.rollingState == RollingState.GENERATING),
-                    onClick = { viewModel.rollAllDice() },
-                    lockedCount = uiState.blueprint.rollSettings.lockedParameters.size
+                    onRollSingle = { viewModel.rollSingleDie(it) },
+                    onToggleLock = { viewModel.toggleLock(it) },
+                    onRollAllUnlocked = { viewModel.rollAllDice() }
                 )
             }
 
@@ -251,7 +248,7 @@ fun MainScreen(
                 )
             }
 
-            // 3. Audio Playback Section & Controls
+            // 3. Audio Playback Section & Multi-Track Visualizer
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -264,7 +261,7 @@ fun MainScreen(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        // Playback Header
+                        // Playback Header Controls
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -302,15 +299,12 @@ fun MainScreen(
                             }
                         }
 
-                        // Interactive Waveform Visualizer
-                        WaveformVisualizer(
+                        // 4-Lane MultiTrackVisualizer
+                        MultiTrackVisualizer(
+                            tracks = uiState.blueprint.arrangement?.tracks,
                             progress = uiState.progress,
                             onSeek = { viewModel.seekTo(it) },
-                            isPlaying = uiState.isPlaying
-                        )
-
-                        // Channel Solo/Mute Audition Row
-                        TrackAuditionRow(
+                            isPlaying = uiState.isPlaying,
                             mutedChannels = uiState.mutedChannels,
                             soloedChannels = uiState.soloedChannels,
                             onMuteToggle = { viewModel.toggleMute(it) },
