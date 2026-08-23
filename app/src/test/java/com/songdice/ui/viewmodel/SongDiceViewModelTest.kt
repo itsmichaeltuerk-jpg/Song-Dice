@@ -39,12 +39,29 @@ class SongDiceViewModelTest {
         val state = viewModel.uiState.value
 
         assertEquals("Rolling state should be READY after startup roll", RollingState.READY, state.rollingState)
+        assertEquals("Default selected tab should be 0 (Roll Studio)", 0, state.selectedTab)
         assertNotNull("SongBlueprint should not be null", state.blueprint)
         assertTrue("Dice states map should contain entries for all parameters", state.blueprint.diceStates.isNotEmpty())
         assertNotNull("Arrangement should be present in blueprint", state.blueprint.arrangement)
         assertTrue("Zip bytes should be generated", state.zipBytes != null && state.zipBytes!!.isNotEmpty())
+        assertTrue("Midi bytes should be generated", state.midiBytes != null && state.midiBytes!!.isNotEmpty())
         assertTrue("Export ready flag should be true", state.exportReady)
         assertTrue("Bundle filename should end with .zip", state.bundleFileName.endsWith(".zip"))
+    }
+
+    @Test
+    fun testTabSelectionAndPreviewRoll() {
+        assertEquals(0, viewModel.uiState.value.selectedTab)
+
+        viewModel.selectTab(1)
+        assertEquals(1, viewModel.uiState.value.selectedTab)
+
+        viewModel.selectTab(0)
+        assertEquals(0, viewModel.uiState.value.selectedTab)
+
+        viewModel.previewRoll()
+        assertEquals("Preview roll should switch to Tab 1 (Player & Stems)", 1, viewModel.uiState.value.selectedTab)
+        assertTrue("Preview roll should start playback", viewModel.uiState.value.isPlaying)
     }
 
     @Test

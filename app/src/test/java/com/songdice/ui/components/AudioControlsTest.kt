@@ -77,7 +77,7 @@ class AudioControlsTest {
 
     @Test
     fun `AudioPlayer transitions to IDLE and calculates duration when arrangement is loaded`() {
-        audioPlayer.loadArrangement(sampleArrangement, totalBeats = 16.0)
+        audioPlayer.loadArrangement(sampleArrangement)
 
         assertEquals(PlaybackState.IDLE, audioPlayer.playbackState.value)
         assertTrue(audioPlayer.durationMs.value > 0L)
@@ -86,7 +86,7 @@ class AudioControlsTest {
 
     @Test
     fun `AudioPlayer manages play, pause, and stop state transitions`() {
-        audioPlayer.loadArrangement(sampleArrangement, totalBeats = 16.0)
+        audioPlayer.loadArrangement(sampleArrangement)
 
         audioPlayer.play()
         assertEquals(PlaybackState.PLAYING, audioPlayer.playbackState.value)
@@ -101,7 +101,7 @@ class AudioControlsTest {
 
     @Test
     fun `AudioPlayer scrub boundary math clamps target progress between 0_0 and 1_0`() {
-        audioPlayer.loadArrangement(sampleArrangement, totalBeats = 16.0)
+        audioPlayer.loadArrangement(sampleArrangement)
 
         // Negative progress clamps to 0.0f
         audioPlayer.seekTo(-0.5f)

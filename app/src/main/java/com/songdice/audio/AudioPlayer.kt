@@ -1,9 +1,8 @@
 package com.songdice.audio
 
-import android.media.AudioAttributes
-import android.media.AudioFormat
-import android.media.AudioTrack
-import com.example.songdice.data.model.InstrumentTrack
+import android.content.Context
+import android.media.MediaPlayer
+import com.example.songdice.data.midi.MidiEncoder
 import com.example.songdice.data.model.SongArrangement
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -15,10 +14,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlin.math.roundToLong
+import java.io.File
+import java.io.FileOutputStream
 
 /**
- * Playback state enumeration for preview audio playback.
+ * Playback state enumeration for native MIDI playback.
  */
 enum class PlaybackState {
     IDLE,
@@ -30,8 +30,9 @@ enum class PlaybackState {
 }
 
 /**
- * Pure Android/Kotlin AudioPlayer wrapper for real-time preview audio playback,
- * seek/scrub controls, and channel solo/mute auditioning.
+ * Direct Native Android MIDI Playback Engine via [MediaPlayer].
+ * Takes Type 1 Standard MIDI file bytes or [SongArrangement] and plays directly
+ * without CPU-intensive WavSynthesizer software synthesis.
  */
 class AudioPlayer(
     private val coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -48,19 +49,22 @@ class AudioPlayer(
     private val _durationMs = MutableStateFlow(0L)
     val durationMs: StateFlow<Long> = _durationMs.asStateFlow()
 
+    private val _currentBar = MutableStateFlow(1)
+    val currentBar: StateFlow<Int> = _currentBar.asStateFlow()
+
+    private val _currentBeat = MutableStateFlow(1)
+    val currentBeat: StateFlow<Int> = _currentBeat.asStateFlow()
+
     private val _mutedChannels = MutableStateFlow<Set<Int>>(emptySet())
     val mutedChannels: StateFlow<Set<Int>> = _mutedChannels.asStateFlow()
 
     private val _soloedChannels = MutableStateFlow<Set<Int>>(emptySet())
     val soloedChannels: StateFlow<Set<Int>> = _soloedChannels.asStateFlow()
 
-    private var currentArrangement: SongArrangement? = null
-    private var currentTracks: List<InstrumentTrack> = emptyList()
+    private var mediaPlayer: MediaPlayer? = null
+    private var progressJob: Job? = null
+    private var tempMidiFile: File? = null
     private var currentBpm: Int = 120
-    private var pcmData: ByteArray = ByteArray(0)
-
-    private var audioTrack: AudioTrack? = null
-    private var playbackJob: Job? = null
 
     companion object {
         const val CHANNEL_CHORDS = 0
@@ -71,9 +75,6 @@ class AudioPlayer(
         val AUDITION_CHANNELS = listOf(CHANNEL_CHORDS, CHANNEL_BASS, CHANNEL_LEAD, CHANNEL_DRUMS)
     }
 
-    /**
-     * Bitmask calculation for channel solo/mute state.
-     */
     fun channelToBit(channel: Int): Int = 1 shl channel
 
     fun getMuteBitmask(): Int {
@@ -96,11 +97,6 @@ class AudioPlayer(
 
     fun isChannelSoloed(channel: Int): Boolean = _soloedChannels.value.contains(channel)
 
-    /**
-     * Determines if a channel is active given current mute and solo rules.
-     * Rule: If any channel is soloed, only soloed non-muted channels are active.
-     * Otherwise, any non-muted channel is active.
-     */
     fun isChannelActive(channel: Int): Boolean {
         val solos = _soloedChannels.value
         val mutes = _mutedChannels.value
@@ -118,14 +114,12 @@ class AudioPlayer(
         val current = _mutedChannels.value.toMutableSet()
         if (isMuted) current.add(channel) else current.remove(channel)
         _mutedChannels.value = current
-        onAuditionStateChanged()
     }
 
     fun setChannelSolo(channel: Int, isSoloed: Boolean) {
         val current = _soloedChannels.value.toMutableSet()
         if (isSoloed) current.add(channel) else current.remove(channel)
         _soloedChannels.value = current
-        onAuditionStateChanged()
     }
 
     fun toggleMute(channel: Int) {
@@ -137,236 +131,192 @@ class AudioPlayer(
     }
 
     /**
-     * Loads a [SongArrangement] for audio preview rendering.
+     * Loads a [SongArrangement] by generating MIDI file bytes and setting up MediaPlayer.
      */
-    fun loadArrangement(arrangement: SongArrangement, totalBeats: Double = 16.0) {
+    fun loadArrangement(arrangement: SongArrangement, context: Context? = null) {
         stop()
-        currentArrangement = arrangement
-        currentTracks = arrangement.tracks
         currentBpm = arrangement.bpm.coerceIn(40, 280)
-        rebuildAudioBuffer(totalBeats)
-        _playbackState.value = PlaybackState.IDLE
+        val tempFile = context?.cacheDir?.let { cacheDir ->
+            File(cacheDir, "preview_song.mid")
+        } ?: File.createTempFile("preview_song", ".mid")
+
+        MidiEncoder.createMidiFile(arrangement, tempFile)
+        loadMidiFile(tempFile)
     }
 
     /**
-     * Loads raw instrument tracks directly.
+     * Loads MIDI file bytes directly into cache file and initializes playback.
      */
-    fun loadTracks(tracks: List<InstrumentTrack>, bpm: Int, totalBeats: Double = 16.0) {
+    fun loadMidiBytes(bytes: ByteArray, context: Context? = null) {
         stop()
-        currentArrangement = null
-        currentTracks = tracks
-        currentBpm = bpm.coerceIn(40, 280)
-        rebuildAudioBuffer(totalBeats)
-        _playbackState.value = PlaybackState.IDLE
-    }
+        val tempFile = context?.cacheDir?.let { cacheDir ->
+            File(cacheDir, "preview_song.mid")
+        } ?: File.createTempFile("preview_song", ".mid")
 
-    /**
-     * Loads pre-synthesized PCM WAV byte array directly.
-     */
-    fun loadWavBuffer(wavBytes: ByteArray) {
-        stop()
-        currentArrangement = null
-        currentTracks = emptyList()
-        extractWavPcm(wavBytes)
-        _playbackState.value = PlaybackState.IDLE
-    }
-
-    private fun rebuildAudioBuffer(totalBeats: Double = 16.0) {
-        if (currentTracks.isEmpty() && currentArrangement == null) return
-
-        val tracksToRender = currentTracks.filter { track ->
-            isChannelActive(track.channel)
+        FileOutputStream(tempFile).use { fos ->
+            fos.write(bytes)
         }
-
-        val wavBytes = WavSynthesizer.renderToWav(tracksToRender, currentBpm, totalBeats)
-        extractWavPcm(wavBytes)
+        loadMidiFile(tempFile)
     }
 
-    private fun extractWavPcm(wavBytes: ByteArray) {
-        if (wavBytes.size > 44) {
-            // Strip 44-byte RIFF header to get raw 16-bit PCM samples
-            pcmData = wavBytes.copyOfRange(44, wavBytes.size)
-            // 2 channels, 16-bit (2 bytes) = 4 bytes per stereo frame at 44100 Hz
-            val totalFrames = pcmData.size / 4
-            val durationSec = totalFrames.toDouble() / 44100.0
-            _durationMs.value = (durationSec * 1000.0).roundToLong().coerceAtLeast(0L)
-        } else {
-            pcmData = ByteArray(0)
-            _durationMs.value = 0L
+    /**
+     * Prepares [MediaPlayer] with target MIDI file.
+     */
+    fun loadMidiFile(midiFile: File) {
+        stop()
+        tempMidiFile = midiFile
+
+        // Estimate duration based on 4 bars of 4/4 at currentBpm if file exists
+        val totalBeats = 16.0
+        val estimatedMs = ((totalBeats / (currentBpm / 60.0)) * 1000.0).toLong()
+        _durationMs.value = estimatedMs.coerceAtLeast(1000L)
+
+        try {
+            val mp = MediaPlayer().apply {
+                setDataSource(midiFile.absolutePath)
+                isLooping = true
+                prepare()
+            }
+            if (mp.duration > 0) {
+                _durationMs.value = mp.duration.toLong()
+            }
+            mediaPlayer = mp
+            _playbackState.value = PlaybackState.IDLE
+        } catch (e: Throwable) {
+            // JVM Unit test environment fallback or unsupported codec
+            mediaPlayer = null
+            _playbackState.value = PlaybackState.IDLE
         }
         _positionMs.value = 0L
         _progress.value = 0.0f
-    }
-
-    private fun onAuditionStateChanged() {
-        if (currentTracks.isNotEmpty()) {
-            val wasPlaying = _playbackState.value == PlaybackState.PLAYING
-            val currentProgress = _progress.value
-            rebuildAudioBuffer()
-            if (wasPlaying) {
-                seekTo(currentProgress)
-                play()
-            } else {
-                seekTo(currentProgress)
-            }
-        }
+        updateBarBeat(0L)
     }
 
     /**
-     * Starts playback from current position.
+     * Starts native MIDI playback.
      */
     fun play() {
-        if (pcmData.isEmpty()) {
-            _playbackState.value = PlaybackState.IDLE
-            return
+        val mp = mediaPlayer
+        if (mp != null) {
+            try {
+                mp.start()
+                _playbackState.value = PlaybackState.PLAYING
+            } catch (e: Exception) {
+                _playbackState.value = PlaybackState.ERROR
+            }
+        } else {
+            // JVM unit test fallback simulation
+            _playbackState.value = PlaybackState.PLAYING
         }
-
-        if (_playbackState.value == PlaybackState.COMPLETED) {
-            seekTo(0.0f)
-        }
-
-        _playbackState.value = PlaybackState.PLAYING
-        startPlaybackLoop()
+        startProgressMonitor()
     }
 
     /**
-     * Pauses audio playback.
+     * Pauses playback.
      */
     fun pause() {
         if (_playbackState.value == PlaybackState.PLAYING) {
+            try {
+                mediaPlayer?.pause()
+            } catch (_: Exception) {}
             _playbackState.value = PlaybackState.PAUSED
-            stopAudioTrack()
+            progressJob?.cancel()
         }
     }
 
     /**
-     * Stops audio playback and resets progress.
+     * Stops playback and resets position.
      */
     fun stop() {
-        playbackJob?.cancel()
-        playbackJob = null
-        stopAudioTrack()
-        _playbackState.value = PlaybackState.STOPPED
-        _progress.value = 0.0f
-        _positionMs.value = 0L
-    }
-
-    /**
-     * Seeks to target fractional progress clamped strictly to range [0.0f, 1.0f].
-     */
-    fun seekTo(targetProgress: Float) {
-        val clampedProgress = targetProgress.coerceIn(0.0f, 1.0f)
-        _progress.value = clampedProgress
-        val totalMs = _durationMs.value
-        _positionMs.value = (clampedProgress * totalMs).roundToLong()
-
-        if (_playbackState.value == PlaybackState.PLAYING) {
-            stopAudioTrack()
-            startPlaybackLoop()
-        }
-    }
-
-    private fun stopAudioTrack() {
+        progressJob?.cancel()
+        progressJob = null
         try {
-            audioTrack?.let {
-                if (it.playState == AudioTrack.PLAYSTATE_PLAYING) {
+            mediaPlayer?.let {
+                if (it.isPlaying) {
                     it.stop()
                 }
                 it.release()
             }
         } catch (_: Exception) {}
-        audioTrack = null
+        mediaPlayer = null
+        _playbackState.value = PlaybackState.STOPPED
+        _progress.value = 0.0f
+        _positionMs.value = 0L
+        updateBarBeat(0L)
     }
 
-    private fun startPlaybackLoop() {
-        playbackJob?.cancel()
-        playbackJob = coroutineScope.launch(Dispatchers.Default) {
-            val totalBytes = pcmData.size
-            if (totalBytes == 0) return@launch
+    /**
+     * Seeks to target fractional progress [0.0f, 1.0f].
+     */
+    fun seekTo(targetProgress: Float) {
+        val clampedProgress = targetProgress.coerceIn(0.0f, 1.0f)
+        _progress.value = clampedProgress
+        val totalMs = _durationMs.value
+        val targetMs = (clampedProgress * totalMs).toLong()
+        _positionMs.value = targetMs
+        updateBarBeat(targetMs)
 
-            val startByte = ((_progress.value * totalBytes).toInt() / 4) * 4
-            val sampleRate = 44100
-            val channelConfig = AudioFormat.CHANNEL_OUT_STEREO
-            val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-            val bufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat).coerceAtLeast(4096)
+        try {
+            mediaPlayer?.seekTo(targetMs.toInt())
+        } catch (_: Exception) {}
+    }
 
-            try {
-                val track = AudioTrack.Builder()
-                    .setAudioAttributes(
-                        AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_MEDIA)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                            .build()
-                    )
-                    .setAudioFormat(
-                        AudioFormat.Builder()
-                            .setEncoding(audioFormat)
-                            .setSampleRate(sampleRate)
-                            .setChannelMask(channelConfig)
-                            .build()
-                    )
-                    .setBufferSizeInBytes(bufferSize)
-                    .setTransferMode(AudioTrack.MODE_STREAM)
-                    .build()
+    /**
+     * Seeks to target position in milliseconds.
+     */
+    fun seekToPosition(positionMs: Long) {
+        val totalMs = _durationMs.value
+        if (totalMs > 0) {
+            val progressVal = (positionMs.toFloat() / totalMs.toFloat()).coerceIn(0.0f, 1.0f)
+            seekTo(progressVal)
+        }
+    }
 
-                audioTrack = track
-                track.play()
+    fun release() {
+        stop()
+    }
 
-                var bytesWritten = startByte
-                val chunkSize = 2048
+    private fun startProgressMonitor() {
+        progressJob?.cancel()
+        progressJob = coroutineScope.launch(Dispatchers.Default) {
+            while (isActive && _playbackState.value == PlaybackState.PLAYING) {
+                val mp = mediaPlayer
+                val currentMs = if (mp != null) {
+                    try {
+                        mp.currentPosition.toLong()
+                    } catch (_: Exception) {
+                        _positionMs.value + 50L
+                    }
+                } else {
+                    _positionMs.value + 50L
+                }
 
-                while (isActive && _playbackState.value == PlaybackState.PLAYING && bytesWritten < totalBytes) {
-                    val remaining = totalBytes - bytesWritten
-                    val count = remaining.coerceAtMost(chunkSize)
-                    val written = track.write(pcmData, bytesWritten, count)
+                val totalMs = _durationMs.value
+                if (totalMs > 0) {
+                    val progressVal = (currentMs.toFloat() / totalMs.toFloat()).coerceIn(0.0f, 1.0f)
+                    _progress.value = progressVal
+                    _positionMs.value = currentMs
+                    updateBarBeat(currentMs)
 
-                    if (written > 0) {
-                        bytesWritten += written
-                        val progressVal = bytesWritten.toFloat() / totalBytes.toFloat()
-                        _progress.value = progressVal.coerceIn(0.0f, 1.0f)
-                        _positionMs.value = (progressVal * _durationMs.value).roundToLong()
-                    } else if (written < 0) {
-                        _playbackState.value = PlaybackState.ERROR
+                    if (currentMs >= totalMs && mp?.isLooping != true) {
+                        _playbackState.value = PlaybackState.COMPLETED
                         break
                     }
                 }
-
-                if (bytesWritten >= totalBytes && _playbackState.value == PlaybackState.PLAYING) {
-                    _progress.value = 1.0f
-                    _positionMs.value = _durationMs.value
-                    _playbackState.value = PlaybackState.COMPLETED
-                }
-            } catch (e: Exception) {
-                // If AudioTrack is not supported (e.g. standard JVM test environment), fallback to simulation
-                runSimulationLoop(startByte, totalBytes)
+                delay(50L)
             }
         }
     }
 
-    private suspend fun runSimulationLoop(startByte: Int, totalBytes: Int) {
-        var bytesProcessed = startByte
-        val durationMs = _durationMs.value
-        if (durationMs <= 0L) {
-            _playbackState.value = PlaybackState.COMPLETED
-            return
-        }
+    private fun updateBarBeat(positionMs: Long) {
+        val msPerBeat = (60.0 / currentBpm.toDouble()) * 1000.0
+        if (msPerBeat <= 0) return
 
-        val stepMs = 50L
-        val bytesPerMs = totalBytes.toDouble() / durationMs.toDouble()
+        val totalBeatsElapsed = (positionMs.toDouble() / msPerBeat)
+        val barIndex = (totalBeatsElapsed / 4.0).toInt() + 1
+        val beatIndex = (totalBeatsElapsed % 4.0).toInt() + 1
 
-        while (coroutineScope.coroutineContext.isActive && _playbackState.value == PlaybackState.PLAYING && bytesProcessed < totalBytes) {
-            delay(stepMs)
-            bytesProcessed += (stepMs * bytesPerMs).toInt()
-            if (bytesProcessed > totalBytes) bytesProcessed = totalBytes
-            val progressVal = (bytesProcessed.toFloat() / totalBytes.toFloat()).coerceIn(0.0f, 1.0f)
-            _progress.value = progressVal
-            _positionMs.value = (progressVal * durationMs).roundToLong()
-        }
-
-        if (bytesProcessed >= totalBytes && _playbackState.value == PlaybackState.PLAYING) {
-            _progress.value = 1.0f
-            _positionMs.value = durationMs
-            _playbackState.value = PlaybackState.COMPLETED
-        }
+        _currentBar.value = barIndex.coerceAtLeast(1)
+        _currentBeat.value = beatIndex.coerceIn(1, 4)
     }
 }
