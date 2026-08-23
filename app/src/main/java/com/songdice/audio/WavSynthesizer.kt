@@ -11,6 +11,8 @@ import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.pow
 import kotlin.math.sin
+import kotlin.math.sqrt
+import kotlin.math.tan
 import kotlin.math.tanh
 import kotlin.random.Random
 
@@ -27,7 +29,7 @@ object WavSynthesizer {
     const val SAMPLE_RATE = 44100
     const val NUM_CHANNELS = 2
     const val BITS_PER_SAMPLE = 16
-    const val HEADROOM_SCALE = 0.8
+    const val HEADROOM_SCALE = 0.85
 
     enum class VoiceType { CHORDS, BASS, LEAD, DRUMS }
 
@@ -68,6 +70,7 @@ object WavSynthesizer {
 
         val leftBuffer = DoubleArray(totalSamples)
         val rightBuffer = DoubleArray(totalSamples)
+        val activeVoiceCountBuffer = IntArray(totalSamples)
 
         for (track in tracks) {
             val voiceType = determineVoiceType(track.channel, track.trackName)
@@ -78,10 +81,14 @@ object WavSynthesizer {
                     secondsPerBeat = secondsPerBeat,
                     totalSamples = totalSamples,
                     leftBuffer = leftBuffer,
-                    rightBuffer = rightBuffer
+                    rightBuffer = rightBuffer,
+                    activeVoiceCountBuffer = activeVoiceCountBuffer
                 )
             }
         }
+
+        // Apply 2-pole Butterworth LPF (~4.5 kHz cutoff) for anti-aliasing
+        applyButterworthLpf(leftBuffer, rightBuffer, totalSamples, cutoffHz = 4500.0)
 
         val wavBytes = ByteArray(totalFileSize)
         val header = createWavHeader(dataSize)
@@ -90,10 +97,14 @@ object WavSynthesizer {
         var byteIdx = 44
         val maxShort = 32767.0
         for (i in 0 until totalSamples) {
-            val sampleL = leftBuffer[i]
-            val sampleR = rightBuffer[i]
+            val numActiveVoices = activeVoiceCountBuffer[i].coerceAtLeast(1)
+            // Master bus gain staging: scale polyphonic voices by 1.0 / sqrt(numActiveVoices)
+            val gainScale = 1.0 / sqrt(numActiveVoices.toDouble())
 
-            // Apply master bus headroom scaling (0.8 max amplitude) and soft clipping
+            val sampleL = leftBuffer[i] * gainScale
+            val sampleR = rightBuffer[i] * gainScale
+
+            // Apply soft-knee tanh limiter
             val masteredL = tanh(sampleL) * HEADROOM_SCALE
             val masteredR = tanh(sampleR) * HEADROOM_SCALE
 
@@ -177,13 +188,19 @@ object WavSynthesizer {
         secondsPerBeat: Double,
         totalSamples: Int,
         leftBuffer: DoubleArray,
-        rightBuffer: DoubleArray
+        rightBuffer: DoubleArray,
+        activeVoiceCountBuffer: IntArray
     ) {
         val noteStartSec = note.startBeat * secondsPerBeat
         val noteDurSec = note.durationBeats * secondsPerBeat
 
+        val releaseTailSec = when (voiceType) {
+            VoiceType.DRUMS -> 0.05
+            else -> 0.05.coerceAtLeast(0.03)
+        }
+
         val startFrame = (noteStartSec * SAMPLE_RATE).toInt().coerceIn(0, totalSamples)
-        val endFrame = ((noteStartSec + noteDurSec + 0.5) * SAMPLE_RATE).toInt().coerceIn(0, totalSamples)
+        val endFrame = ((noteStartSec + noteDurSec + releaseTailSec) * SAMPLE_RATE).toInt().coerceIn(0, totalSamples)
 
         if (startFrame >= totalSamples || startFrame >= endFrame) return
 
@@ -193,7 +210,6 @@ object WavSynthesizer {
         val rightGain = kotlin.math.sin(pan * PI / 2.0)
 
         val freq = midiPitchToFreq(note.pitch)
-
         val random = Random(note.pitch * 31 + startFrame)
 
         for (frame in startFrame until endFrame) {
@@ -208,62 +224,66 @@ object WavSynthesizer {
 
             leftBuffer[frame] += rawL * velGain * leftGain
             rightBuffer[frame] += rawR * velGain * rightGain
+            activeVoiceCountBuffer[frame]++
         }
     }
 
     /**
-     * Ch 0 (Chords): Polyphonic soft sine/triangle oscillators with ADSR envelope.
+     * Ch 0 (Chords): Harmonic additive sine synthesis with minimum 10ms attack / 30ms release envelope.
      */
     private fun synthesizeChordsSample(freq: Double, tSec: Double, noteDurSec: Double): Pair<Double, Double> {
-        val sine = sin(2.0 * PI * freq * tSec)
-        val triPhase = (freq * tSec) % 1.0
-        val triangle = 2.0 * abs(2.0 * (triPhase - floor(triPhase + 0.5))) - 1.0
-
-        val oscSignal = 0.6 * sine + 0.4 * triangle
-        val env = calculateAdsr(tSec, noteDurSec, attackSec = 0.02, decaySec = 0.20, sustainLevel = 0.60, releaseSec = 0.25)
-
-        val sample = oscSignal * env * 0.5
+        val sampleSignal = additiveHarmonicSynth(
+            freq = freq,
+            tSec = tSec,
+            harmonicWeights = floatArrayOf(1.0f, 0.5f, 0.25f, 0.12f)
+        )
+        val env = calculateAdsr(tSec, noteDurSec, attackSec = 0.020, decaySec = 0.20, sustainLevel = 0.60, releaseSec = 0.050)
+        val sample = sampleSignal * env * 0.5
         return Pair(sample, sample)
     }
 
     /**
-     * Ch 1 (Bass): Saturated low-end saw/square wave.
+     * Ch 1 (Bass): Band-limited additive bass oscillator with smooth envelope.
      */
     private fun synthesizeBassSample(freq: Double, tSec: Double, noteDurSec: Double): Pair<Double, Double> {
-        val sawPhase = (freq * tSec) % 1.0
-        val saw = 2.0 * sawPhase - 1.0
-        val square = if (sawPhase < 0.5) 1.0 else -1.0
-
-        val rawBass = 0.5 * saw + 0.5 * square
-        val saturated = tanh(rawBass * 2.2)
-
-        val env = calculateAdsr(tSec, noteDurSec, attackSec = 0.008, decaySec = 0.18, sustainLevel = 0.80, releaseSec = 0.12)
+        val sampleSignal = additiveHarmonicSynth(
+            freq = freq,
+            tSec = tSec,
+            harmonicWeights = floatArrayOf(1.0f, 0.7f, 0.4f, 0.2f, 0.1f)
+        )
+        val saturated = tanh(sampleSignal * 1.8)
+        val env = calculateAdsr(tSec, noteDurSec, attackSec = 0.010, decaySec = 0.18, sustainLevel = 0.80, releaseSec = 0.040)
         val sample = saturated * env * 0.65
         return Pair(sample, sample)
     }
 
     /**
-     * Ch 2 (Lead): Pulse wave lead with subtle vibrato.
+     * Ch 2 (Lead): Additive pulse lead with subtle vibrato and smoothed envelope.
      */
     private fun synthesizeLeadSample(freq: Double, tSec: Double, noteDurSec: Double): Pair<Double, Double> {
         val vibratoRate = 5.5
         val vibratoDepth = 0.008 // subtle ~8 cents vibrato
         val modFreq = freq * (1.0 + vibratoDepth * sin(2.0 * PI * vibratoRate * tSec))
 
-        val pulsePhase = (modFreq * tSec) % 1.0
-        val pulse = if (pulsePhase < 0.35) 0.8 else -0.8
-
-        val env = calculateAdsr(tSec, noteDurSec, attackSec = 0.012, decaySec = 0.15, sustainLevel = 0.70, releaseSec = 0.18)
-        val sample = pulse * env * 0.50
+        val sampleSignal = additiveHarmonicSynth(
+            freq = modFreq,
+            tSec = tSec,
+            harmonicWeights = floatArrayOf(1.0f, 0.3f, 0.6f, 0.2f, 0.4f)
+        )
+        val env = calculateAdsr(tSec, noteDurSec, attackSec = 0.015, decaySec = 0.15, sustainLevel = 0.70, releaseSec = 0.040)
+        val sample = sampleSignal * env * 0.50
         return Pair(sample, sample)
     }
 
     /**
-     * Ch 9 (Drums): Synthesized kick, snare noise, and hat ticks.
+     * Ch 9 (Drums): Synthesized kick, snare noise, and hat ticks with click-free envelopes.
      */
     private fun synthesizeDrumSample(pitch: Int, tSec: Double, random: Random): Pair<Double, Double> {
         var left = 0.0
         var right = 0.0
+
+        // Attack ramp for drums to eliminate DC click (1ms ramp)
+        val drumAttack = (tSec / 0.001).coerceIn(0.0, 1.0)
 
         when (pitch) {
             35, 36 -> { // Kick
@@ -271,7 +291,7 @@ object WavSynthesizer {
                     val fSweep = 45.0 + 95.0 * exp(-tSec * 45.0)
                     val kickBody = sin(2.0 * PI * fSweep * tSec)
                     val click = (random.nextDouble() * 2.0 - 1.0) * exp(-tSec * 120.0)
-                    val env = exp(-tSec * 16.0)
+                    val env = exp(-tSec * 16.0) * drumAttack
                     val kick = (kickBody + 0.2 * click) * env * 0.85
                     left = kick
                     right = kick
@@ -281,7 +301,7 @@ object WavSynthesizer {
                 if (tSec < 0.22) {
                     val tone = sin(2.0 * PI * 185.0 * tSec)
                     val noise = random.nextDouble() * 2.0 - 1.0
-                    val env = exp(-tSec * 18.0)
+                    val env = exp(-tSec * 18.0) * drumAttack
                     val snare = (0.4 * tone + 0.6 * noise) * env * 0.75
                     left = snare
                     right = snare
@@ -291,7 +311,7 @@ object WavSynthesizer {
                 if (tSec < 0.08) {
                     val noise = random.nextDouble() * 2.0 - 1.0
                     val metal = sin(2.0 * PI * 7000.0 * tSec)
-                    val env = exp(-tSec * 55.0)
+                    val env = exp(-tSec * 55.0) * drumAttack
                     val hat = (0.7 * noise + 0.3 * metal) * env * 0.35
                     left = hat * 0.4
                     right = hat * 0.6
@@ -301,7 +321,7 @@ object WavSynthesizer {
                 if (tSec < 0.28) {
                     val noise = random.nextDouble() * 2.0 - 1.0
                     val metal = sin(2.0 * PI * 6500.0 * tSec)
-                    val env = exp(-tSec * 14.0)
+                    val env = exp(-tSec * 14.0) * drumAttack
                     val hat = (0.7 * noise + 0.3 * metal) * env * 0.45
                     left = hat * 0.45
                     right = hat * 0.55
@@ -311,7 +331,7 @@ object WavSynthesizer {
                 if (tSec < 0.15) {
                     val freq = midiPitchToFreq(pitch).coerceIn(100.0, 3000.0)
                     val tone = sin(2.0 * PI * freq * tSec)
-                    val env = exp(-tSec * 22.0)
+                    val env = exp(-tSec * 22.0) * drumAttack
                     val perc = tone * env * 0.45
                     left = perc
                     right = perc
@@ -319,6 +339,74 @@ object WavSynthesizer {
             }
         }
         return Pair(left, right)
+    }
+
+    /**
+     * Harmonic additive sine synthesis below Nyquist frequency to avoid aliasing.
+     */
+    private fun additiveHarmonicSynth(
+        freq: Double,
+        tSec: Double,
+        harmonicWeights: FloatArray
+    ): Double {
+        val nyquist = SAMPLE_RATE / 2.0
+        var signal = 0.0
+        var totalWeight = 0.0
+
+        for (i in harmonicWeights.indices) {
+            val harmonicNum = i + 1
+            val hFreq = freq * harmonicNum
+            if (hFreq >= nyquist) break
+
+            val w = harmonicWeights[i].toDouble()
+            signal += w * sin(2.0 * PI * hFreq * tSec)
+            totalWeight += w
+        }
+
+        return if (totalWeight > 0.0) signal / totalWeight else 0.0
+    }
+
+    /**
+     * Applies a 2-pole Butterworth Low-Pass Filter (~4.5 kHz cutoff) across stereo buffers.
+     */
+    private fun applyButterworthLpf(
+        leftBuffer: DoubleArray,
+        rightBuffer: DoubleArray,
+        totalSamples: Int,
+        cutoffHz: Double = 4500.0
+    ) {
+        val nyquist = SAMPLE_RATE / 2.0
+        val fc = cutoffHz.coerceAtMost(nyquist * 0.95)
+        val omegaC = tan(PI * fc / SAMPLE_RATE)
+        val k = sqrt(2.0) * omegaC
+        val c = omegaC * omegaC
+
+        val a0 = 1.0 + k + c
+        val b0 = c / a0
+        val b1 = 2.0 * c / a0
+        val b2 = c / a0
+        val a1 = 2.0 * (c - 1.0) / a0
+        val a2 = (1.0 - k + c) / a0
+
+        var xL1 = 0.0; var xL2 = 0.0
+        var yL1 = 0.0; var yL2 = 0.0
+
+        var xR1 = 0.0; var xR2 = 0.0
+        var yR1 = 0.0; var yR2 = 0.0
+
+        for (i in 0 until totalSamples) {
+            val xL = leftBuffer[i]
+            val yL = b0 * xL + b1 * xL1 + b2 * xL2 - a1 * yL1 - a2 * yL2
+            xL2 = xL1; xL1 = xL
+            yL2 = yL1; yL1 = yL
+            leftBuffer[i] = yL
+
+            val xR = rightBuffer[i]
+            val yR = b0 * xR + b1 * xR1 + b2 * xR2 - a1 * yR1 - a2 * yR2
+            xR2 = xR1; xR1 = xR
+            yR2 = yR1; yR1 = yR
+            rightBuffer[i] = yR
+        }
     }
 
     private fun calculateAdsr(
@@ -329,15 +417,19 @@ object WavSynthesizer {
         sustainLevel: Double,
         releaseSec: Double
     ): Double {
-        val totalSec = noteDurSec + releaseSec
+        // Enforce minimum attack (10ms) and release (30ms) to prevent clicks
+        val minAttack = attackSec.coerceAtLeast(0.010)
+        val minRelease = releaseSec.coerceAtLeast(0.030)
+        val totalSec = noteDurSec + minRelease
+
         if (tSec < 0.0 || tSec > totalSec) return 0.0
 
         return when {
-            tSec < attackSec && attackSec > 0.0 -> {
-                tSec / attackSec
+            tSec < minAttack -> {
+                tSec / minAttack
             }
-            tSec < (attackSec + decaySec) && decaySec > 0.0 -> {
-                val decayProgress = (tSec - attackSec) / decaySec
+            tSec < (minAttack + decaySec) && decaySec > 0.0 -> {
+                val decayProgress = (tSec - minAttack) / decaySec
                 1.0 - decayProgress * (1.0 - sustainLevel)
             }
             tSec < noteDurSec -> {
@@ -345,10 +437,8 @@ object WavSynthesizer {
             }
             else -> {
                 val relTime = tSec - noteDurSec
-                if (releaseSec > 0.0) {
-                    val relProgress = (relTime / releaseSec).coerceIn(0.0, 1.0)
-                    sustainLevel * (1.0 - relProgress).pow(1.5)
-                } else 0.0
+                val relProgress = (relTime / minRelease).coerceIn(0.0, 1.0)
+                sustainLevel * (1.0 - relProgress).pow(1.5)
             }
         }
     }

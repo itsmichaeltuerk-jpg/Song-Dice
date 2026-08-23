@@ -53,7 +53,7 @@ data class SongDiceUiState(
 
 /**
  * Primary ViewModel for Song Dice application coordinating offline roll generation,
- * audio preview playback state, and SAF / Share Sheet export.
+ * modular individual die rolling, audio preview playback state, and SAF / Share Sheet export.
  */
 class SongDiceViewModel(
     private val repository: SongDiceRepository = SongDiceRepository(),
@@ -207,6 +207,78 @@ class SongDiceViewModel(
                     it.copy(
                         rollingState = RollingState.ERROR,
                         statusMessage = "Error rolling song idea: ${e.message}"
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Re-rolls a single specified unlocked die parameter while leaving all other parameters intact.
+     */
+    fun rollSingleDie(parameter: DiceParameter) {
+        val currentBlueprint = _uiState.value.blueprint
+        val currentDice = currentBlueprint.diceStates
+        val currentState = currentDice[parameter] ?: return
+
+        if (currentState.isLocked) return // Do not re-roll locked die
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    rollingState = RollingState.GENERATING,
+                    statusMessage = "Rolling ${parameter.displayName}..."
+                )
+            }
+
+            try {
+                val presets = repository.dicePresets[parameter] ?: listOf("Default")
+                val newValue = presets.filter { it != currentState.value }.randomOrNull() ?: presets.random()
+
+                val updatedDice = currentDice.toMutableMap()
+                updatedDice[parameter] = currentState.copy(value = newValue)
+
+                val genre = currentBlueprint.genre
+                val bpm = currentBlueprint.bpm
+
+                val arrangement = repository.generateProceduralArrangement(genre, bpm, updatedDice)
+
+                val keyStr = updatedDice[DiceParameter.KEY]?.value ?: "C Major"
+                val isMinor = keyStr.contains("Minor", ignoreCase = true) || keyStr.contains("m", ignoreCase = true)
+
+                val newBlueprint = currentBlueprint.copy(
+                    id = System.currentTimeMillis().toString(),
+                    title = arrangement.title,
+                    keySignature = keyStr,
+                    scaleMode = if (isMinor) "Minor" else "Major",
+                    progression = arrangement.progression,
+                    arrangement = arrangement,
+                    diceStates = updatedDice
+                )
+
+                audioPlayer.loadArrangement(arrangement)
+
+                val zipBytes = zipExporter.createZipBundle(newBlueprint)
+                val fileName = zipExporter.getBundleFileName(newBlueprint)
+
+                _uiState.update {
+                    it.copy(
+                        blueprint = newBlueprint,
+                        rollingState = RollingState.READY,
+                        zipBytes = zipBytes,
+                        bundleFileName = fileName,
+                        exportReady = true,
+                        statusMessage = "Rolled ${parameter.displayName}: $newValue"
+                    )
+                }
+
+                audioPlayer.play()
+
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        rollingState = RollingState.ERROR,
+                        statusMessage = "Error rolling ${parameter.displayName}: ${e.message}"
                     )
                 }
             }
