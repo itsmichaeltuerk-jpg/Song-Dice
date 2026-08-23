@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.songdice.data.midi.MidiEncoder
 import com.example.songdice.data.model.DiceParameter
 import com.example.songdice.data.model.DiceState
 import com.example.songdice.data.model.MusicalGenre
@@ -15,6 +16,8 @@ import com.songdice.data.model.SongBlueprint
 import com.songdice.data.model.SongSection
 import com.songdice.export.ShareManager
 import com.songdice.export.ZipExporter
+import core.midi.builder.MidiBuilder
+import core.midi.model.toMidiSong
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,9 +35,10 @@ enum class RollingState {
 }
 
 /**
- * UI State for Song Dice MainScreen & audio engine interaction.
+ * UI State for Song Dice 2-Tab Studio Console architecture & MIDI audio engine interaction.
  */
 data class SongDiceUiState(
+    val selectedTab: Int = 0, // 0: Roll Studio, 1: Player & Stems
     val blueprint: SongBlueprint = SongBlueprint(),
     val rollingState: RollingState = RollingState.IDLE,
     val statusMessage: String? = null,
@@ -43,9 +47,12 @@ data class SongDiceUiState(
     val progress: Float = 0.0f,
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
+    val currentBar: Int = 1,
+    val currentBeat: Int = 1,
     val mutedChannels: Set<Int> = emptySet(),
     val soloedChannels: Set<Int> = emptySet(),
     val zipBytes: ByteArray? = null,
+    val midiBytes: ByteArray? = null,
     val bundleFileName: String = "Song_Dice_Export.zip",
     val exportReady: Boolean = false,
     val isDarkTheme: Boolean = true
@@ -53,7 +60,7 @@ data class SongDiceUiState(
 
 /**
  * Primary ViewModel for Song Dice application coordinating offline roll generation,
- * modular individual die rolling, audio preview playback state, and SAF / Share Sheet export.
+ * 2-Tab Studio navigation, native MIDI playback state via AudioPlayer, and SAF / Share Sheet export.
  */
 class SongDiceViewModel(
     private val repository: SongDiceRepository = SongDiceRepository(),
@@ -111,6 +118,16 @@ class SongDiceViewModel(
             }
         }
         viewModelScope.launch {
+            audioPlayer.currentBar.collect { bar ->
+                _uiState.update { it.copy(currentBar = bar) }
+            }
+        }
+        viewModelScope.launch {
+            audioPlayer.currentBeat.collect { beat ->
+                _uiState.update { it.copy(currentBeat = beat) }
+            }
+        }
+        viewModelScope.launch {
             audioPlayer.mutedChannels.collect { mutes ->
                 _uiState.update { it.copy(mutedChannels = mutes) }
             }
@@ -126,10 +143,17 @@ class SongDiceViewModel(
     }
 
     /**
+     * Tab selection control: 0 = Roll Studio, 1 = Player & Stems
+     */
+    fun selectTab(tabIndex: Int) {
+        _uiState.update { it.copy(selectedTab = tabIndex.coerceIn(0, 1)) }
+    }
+
+    /**
      * Executes complete 4-bar song idea roll generation flow:
      * - Rolls unlocked dice parameters
      * - Generates multi-track procedural arrangement
-     * - Loads audio preview into AudioPlayer
+     * - Encodes Type 1 MIDI bytes and loads directly into native AudioPlayer
      * - Synthesizes .zip export bundle
      */
     fun rollAllDice() {
@@ -181,8 +205,10 @@ class SongDiceViewModel(
                     diceStates = rolledDice
                 )
 
-                // Load arrangement into AudioPlayer for instant audio preview
-                audioPlayer.loadArrangement(arrangement)
+                val generatedMidiBytes = MidiBuilder.buildMidiFile(arrangement.toMidiSong(MidiEncoder.TICKS_PER_QUARTER_NOTE))
+
+                // Load MIDI file directly into native AudioPlayer
+                audioPlayer.loadMidiBytes(generatedMidiBytes)
 
                 // Synthesize 4-asset .zip bundle
                 val zipBytes = zipExporter.createZipBundle(newBlueprint)
@@ -193,14 +219,12 @@ class SongDiceViewModel(
                         blueprint = newBlueprint,
                         rollingState = RollingState.READY,
                         zipBytes = zipBytes,
+                        midiBytes = generatedMidiBytes,
                         bundleFileName = fileName,
                         exportReady = true,
                         statusMessage = "Song idea generated! Preview ready."
                     )
                 }
-
-                // Automatically start preview playback upon generation completion
-                audioPlayer.play()
 
             } catch (e: Exception) {
                 _uiState.update {
@@ -211,6 +235,16 @@ class SongDiceViewModel(
                 }
             }
         }
+    }
+
+    /**
+     * Preview Roll action triggered from Roll Studio (Tab 1):
+     * Generates roll, switches tab to Player & Stems (Tab 2), and starts playback immediately.
+     */
+    fun previewRoll() {
+        rollAllDice()
+        selectTab(1)
+        audioPlayer.play()
     }
 
     /**
@@ -256,7 +290,9 @@ class SongDiceViewModel(
                     diceStates = updatedDice
                 )
 
-                audioPlayer.loadArrangement(arrangement)
+                val generatedMidiBytes = MidiBuilder.buildMidiFile(arrangement.toMidiSong(MidiEncoder.TICKS_PER_QUARTER_NOTE))
+
+                audioPlayer.loadMidiBytes(generatedMidiBytes)
 
                 val zipBytes = zipExporter.createZipBundle(newBlueprint)
                 val fileName = zipExporter.getBundleFileName(newBlueprint)
@@ -266,13 +302,12 @@ class SongDiceViewModel(
                         blueprint = newBlueprint,
                         rollingState = RollingState.READY,
                         zipBytes = zipBytes,
+                        midiBytes = generatedMidiBytes,
                         bundleFileName = fileName,
                         exportReady = true,
                         statusMessage = "Rolled ${parameter.displayName}: $newValue"
                     )
                 }
-
-                audioPlayer.play()
 
             } catch (e: Exception) {
                 _uiState.update {
@@ -316,7 +351,8 @@ class SongDiceViewModel(
             val finalBlueprint = updatedBlueprint.copy(arrangement = updatedArrangement)
 
             if (updatedArrangement != null) {
-                audioPlayer.loadArrangement(updatedArrangement)
+                val generatedMidiBytes = MidiBuilder.buildMidiFile(updatedArrangement.toMidiSong(MidiEncoder.TICKS_PER_QUARTER_NOTE))
+                audioPlayer.loadMidiBytes(generatedMidiBytes)
             }
 
             val zipBytes = zipExporter.createZipBundle(finalBlueprint)
